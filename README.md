@@ -6,9 +6,9 @@ The data contains 1,516,948 timestamped observations from 15 analogue and digita
 signals on one metro train Air Production Unit (APU). It is operational train telemetry,
 not manufacturing production-line data and not a table of confirmed failures.
 
-The repository currently contains the completed Phase -1 feasibility study and Phase 0
-architecture and engineering contracts. Phase 0 is documentation only: it makes no AWS
-calls and creates no AWS resources.
+The repository contains the Phase -1 feasibility study, Phase 0 architecture contracts,
+and the Phase 1 AWS-independent validation core. It does not deploy or operate the AWS
+pipeline described below.
 
 ## Proposed pipeline
 
@@ -73,6 +73,36 @@ learning are outside this project's scope.
 - Raw data, generated Parquet, artifacts, virtual environments, caches, and Terraform
   state are ignored by Git.
 
+## Phase 1 core API
+
+`metropulse.transform_daily_csv` accepts CSV text or a text-line stream plus an expected
+source date, caller-supplied source metadata, processing time, and pipeline version. It
+returns immutable typed collections of normalized records, quarantine records, batch
+metrics, warnings/errors, and row-count reconciliation. The core performs no filesystem,
+network, or AWS calls and never obtains the current time itself.
+
+```python
+from datetime import UTC, date, datetime
+
+from metropulse import SourceMetadata, transform_daily_csv
+
+result = transform_daily_csv(
+    csv_text,
+    expected_source_date=date(2020, 2, 1),
+    source_metadata=SourceMetadata(source_object_key="raw/source_date=2020-02-01/day.csv"),
+    processing_timestamp=datetime(2026, 9, 10, tzinfo=UTC),
+    pipeline_version="1.0.0",
+)
+```
+
+Run every offline test and quality check with:
+
+```powershell
+.\.venv\Scripts\python.exe -m ruff format --check .
+.\.venv\Scripts\python.exe -m ruff check .
+.\.venv\Scripts\python.exe -m pytest -q
+```
+
 ## Design documents
 
 - [Architecture](docs/architecture.md)
@@ -87,7 +117,7 @@ learning are outside this project's scope.
 - Phase -1 evidence: [data source](docs/data-source.md) and
   [feasibility report](docs/feasibility-report.md)
 
-## Reproduce Phase -1 checks
+## Reproduce Phase -1 profiling
 
 Using Python 3.11 or newer and an already downloaded source archive:
 

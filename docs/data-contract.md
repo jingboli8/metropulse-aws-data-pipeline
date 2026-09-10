@@ -146,7 +146,7 @@ rejection metadata can coexist. One JSON object represents one rejected source r
 | `source_object_etag` | string or null | Yes | S3 ETag when available; it is not assumed to be a content hash. |
 | `source_object_checksum` | string or null | Yes | S3 or manifest checksum and algorithm when available. |
 | `source_row_number` | int64 | No | One-based physical data-record number after the header. |
-| `source_date` | date string | Yes | Expected date from the key, or null if that key is malformed. |
+| `expected_source_date` | date string | No | Expected date supplied from the already validated daily object partition. |
 | `processing_timestamp` | ISO 8601 string | No | UTC operational time at which rejection was produced. This does not alter source time. |
 | `pipeline_version` | string | No | Immutable code/build version used for processing. |
 

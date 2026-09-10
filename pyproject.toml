@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "metropulse-feasibility"
 version = "0.1.0"
-description = "Phase -1 feasibility verification for the official UCI MetroPT-3 dataset"
+description = "Local feasibility and deterministic validation core for MetroPT-3"
 requires-python = ">=3.11"
 dependencies = [
   "duckdb>=1.1,<2",
@@ -19,7 +19,7 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["metropulse_feasibility*"]
+include = ["metropulse*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
