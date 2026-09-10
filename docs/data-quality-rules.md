@@ -19,8 +19,8 @@ telemetry row inside a reported failure window remains valid telemetry.
 
 All required fields are the 17 source fields documented in the data contract. Where a
 structural error prevents field access, only applicable checks run. A row can carry more
-than one rule ID. Duplicate rules reject every member of the duplicate group so the
-result does not depend on row-processing order.
+than one rule ID. Phase 1 rejects every member of a duplicate group, including its first
+occurrence, so acceptance does not depend on row-processing order.
 
 | Rule ID | Class | Condition | Result |
 |---|---|---|---|
