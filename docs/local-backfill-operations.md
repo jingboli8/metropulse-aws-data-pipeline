@@ -64,6 +64,11 @@ stream, then skips the day only if its manifest identity and configuration match
 raw, staging, and any quarantine checksums, sizes, row counts, Parquet schema, and codec
 all verify. File existence alone never causes a skip.
 
+Skipping avoids transformation and publication, but integrity-first resume still reads
+the source stream and hashes every referenced file. The second full run therefore proves
+idempotency and corruption detection rather than promising a dramatic wall-clock
+speedup. Checksum verification must not be weakened to optimize the demonstration.
+
 A missing, corrupt, or stale manifest/output causes that day to be rebuilt. The previous
 manifest is removed before reconstruction and a new manifest is published only after
 validation and row reconciliation succeed. Every data and manifest write uses a sibling
@@ -93,3 +98,29 @@ The verifier independently counts raw CSV, Parquet, quarantine, and manifest row
 recomputes referenced checksums; checks every Parquet schema and codec; reconciles the
 aggregate counts; and scans generated content and metadata for absolute Windows paths.
 Detailed evidence stays under ignored `artifacts/` and is not committed.
+
+## Cross-partition continuity
+
+Manifest version 1.1 records `first_valid_event_timestamp_local`,
+`last_valid_event_timestamp_local`, and `valid_timestamp_count`. When otherwise-valid
+version 1.0 manifests are encountered, resume validates their complete referenced state
+and upgrades only the manifest; raw and staging data are not rewritten.
+
+Run the deterministic global audit after daily acceptance:
+
+```powershell
+.\.venv\Scripts\python.exe -m metropulse.global_audit `
+  --output-root data\local-lake `
+  --evidence artifacts\phase2-global-audit.json `
+  --expected-global-gap-count 331
+```
+
+The audit orders manifests by source date, combines daily sampling distributions, and
+adds each computable last-to-first boundary delta. It reports normal adjacent-date
+boundaries, missing calendar dates, gaps greater than 60 seconds, overlaps, reversed
+boundaries, and boundaries made unassessable by empty or fully quarantined partitions.
+It does not change row validity or quarantine output and never imputes an interval.
+
+The verified result is 1,516,736 within-partition deltas plus 211 boundary deltas,
+equaling 1,516,947 global deltas. Within-partition gaps are 268, boundary gaps are 63,
+and the global total is 331. The detailed report remains ignored under `artifacts/`.

@@ -89,8 +89,11 @@ monolithic source file.
    then publishes the curated manifest and partition. It never appends to a Parquet file.
 6. Glue exposes only `curated/`. Athena queries year/month partitions through a workgroup
    with scan limits and a separate encrypted query-results bucket.
-7. A scheduled audit checks expected daily/monthly manifests and reconciliation. All
-   adapters emit structured logs; terminal metrics are emitted once where practical.
+7. A scheduled audit checks expected daily/monthly manifests, reconciliation, and
+   cross-object continuity by comparing ordered daily manifest endpoints. This audit,
+   rather than an individual validation invocation, owns partition-boundary gap,
+   overlap, reversed-boundary, and missing-date findings. All adapters emit structured
+   logs; terminal metrics are emitted once where practical.
 
 ## Storage zones and ownership
 

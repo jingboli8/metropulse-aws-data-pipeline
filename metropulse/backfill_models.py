@@ -28,6 +28,7 @@ class BackfillSummary:
     processed_day_count: int = 0
     skipped_day_count: int = 0
     rebuilt_day_count: int = 0
+    manifest_upgraded_day_count: int = 0
     failed_day_count: int = 0
     input_row_count: int = 0
     valid_row_count: int = 0
@@ -44,7 +45,12 @@ class BackfillSummary:
     @property
     def completed_day_count(self) -> int:
         """Return all successful selected partitions, including verified skips."""
-        return self.processed_day_count + self.skipped_day_count + self.rebuilt_day_count
+        return (
+            self.processed_day_count
+            + self.skipped_day_count
+            + self.rebuilt_day_count
+            + self.manifest_upgraded_day_count
+        )
 
     @property
     def reconciliation_matches(self) -> bool:
@@ -65,6 +71,7 @@ class BackfillSummary:
             "processed": "processed_day_count",
             "rebuilt": "rebuilt_day_count",
             "skipped": "skipped_day_count",
+            "manifest_upgraded": "manifest_upgraded_day_count",
         }
         if outcome.status not in counters:
             raise ValueError(f"Unknown day outcome: {outcome.status}")
@@ -96,6 +103,7 @@ class BackfillSummary:
             "errors": list(self.errors),
             "failed_day_count": self.failed_day_count,
             "input_row_count": self.input_row_count,
+            "manifest_upgraded_day_count": self.manifest_upgraded_day_count,
             "pipeline_version": self.pipeline_version,
             "processed_day_count": self.processed_day_count,
             "processing_timestamp": self.processing_timestamp,

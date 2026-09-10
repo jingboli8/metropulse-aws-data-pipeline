@@ -128,6 +128,10 @@ def test_daily_split_header_boundary_flush_schema_codec_and_manifest(tmp_path: P
 
     manifest = json.loads(second.manifest.read_text(encoding="utf-8"))
     assert manifest["source_date"] == "2020-02-02"
+    assert manifest["manifest_version"] == "1.1.0"
+    assert manifest["first_valid_event_timestamp_local"] == "2020-02-02T00:00:00"
+    assert manifest["last_valid_event_timestamp_local"] == "2020-02-02T00:00:10"
+    assert manifest["valid_timestamp_count"] == 2
     assert manifest["raw_relative_path"] == ("raw/source=metropt3/source_date=2020-02-02/data.csv")
     assert manifest["staging_relative_path"] == (
         "staging/source=metropt3/year=2020/month=02/day=02/data.parquet"
@@ -225,6 +229,37 @@ def test_resume_verifies_outputs_and_skips_without_rewriting(tmp_path: Path) -> 
     assert second.processed_day_count == second.rebuilt_day_count == 0
     assert {path: sha256_file(path) for path in hashes_before} == hashes_before
     assert {path: path.stat().st_mtime_ns for path in hashes_before} == mtimes_before
+
+
+def test_resume_upgrades_only_a_legacy_manifest(tmp_path: Path) -> None:
+    source_path = tmp_path / "source.csv"
+    write_source(source_path, [source_row(1, "2020-02-01 00:00:00")])
+    output_root = tmp_path / "lake"
+    execute(source_path, output_root)
+    paths = daily_paths(output_root, date(2020, 2, 1))
+    legacy = json.loads(paths.manifest.read_text(encoding="utf-8"))
+    legacy["manifest_version"] = "1.0.0"
+    legacy.pop("first_valid_event_timestamp_local")
+    legacy.pop("last_valid_event_timestamp_local")
+    legacy.pop("valid_timestamp_count")
+    paths.manifest.write_text(
+        json.dumps(legacy, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    data_hashes = {path: sha256_file(path) for path in (paths.raw, paths.staging)}
+    data_mtimes = {path: path.stat().st_mtime_ns for path in data_hashes}
+
+    summary = execute(source_path, output_root)
+
+    upgraded = json.loads(paths.manifest.read_text(encoding="utf-8"))
+    assert summary.manifest_upgraded_day_count == 1
+    assert summary.rebuilt_day_count == 0
+    assert upgraded["manifest_version"] == "1.1.0"
+    assert upgraded["first_valid_event_timestamp_local"] == "2020-02-01T00:00:00"
+    assert upgraded["last_valid_event_timestamp_local"] == "2020-02-01T00:00:00"
+    assert upgraded["valid_timestamp_count"] == 1
+    assert {path: sha256_file(path) for path in data_hashes} == data_hashes
+    assert {path: path.stat().st_mtime_ns for path in data_mtimes} == data_mtimes
 
 
 @pytest.mark.parametrize("corrupt_target", ["staging", "manifest"])

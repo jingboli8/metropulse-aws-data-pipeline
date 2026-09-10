@@ -10,6 +10,8 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
+import pyarrow.parquet as pq
+
 from metropulse.backfill_models import DayOutcome
 from metropulse.backfill_source import BackfillError
 from metropulse.local_io import sha256_file, write_text_atomic
@@ -22,6 +24,7 @@ from metropulse.schema import SCHEMA_VERSION
 from metropulse.transform import transform_daily_csv
 
 ABSOLUTE_WINDOWS_PATH = re.compile(r"^[A-Za-z]:[\\/]")
+LEGACY_MANIFEST_VERSION = "1.0.0"
 
 
 def _contains_absolute_path(value: object) -> bool:
@@ -42,7 +45,8 @@ def _read_manifest(path: Path) -> dict[str, Any] | None:
     return value if isinstance(value, dict) else None
 
 
-def verify_completed_day(
+def _verify_manifest(
+    manifest: Mapping[str, Any],
     paths: DailyPaths,
     *,
     source_identity: Mapping[str, object],
@@ -52,14 +56,14 @@ def verify_completed_day(
     generated_raw_sha256: str,
     generated_raw_byte_size: int,
     generated_input_row_count: int,
+    manifest_version: str,
+    require_boundary_metadata: bool,
 ) -> dict[str, Any] | None:
-    """Validate a completion manifest and every referenced generated file."""
-    manifest = _read_manifest(paths.manifest)
-    if manifest is None or _contains_absolute_path(manifest):
+    if _contains_absolute_path(manifest):
         return None
     expected_values = {
         "input_row_count": generated_input_row_count,
-        "manifest_version": MANIFEST_VERSION,
+        "manifest_version": manifest_version,
         "pipeline_version": pipeline_version,
         "processing_timestamp": processing_timestamp,
         "raw_byte_size": generated_raw_byte_size,
@@ -72,6 +76,21 @@ def verify_completed_day(
     }
     if any(manifest.get(key) != value for key, value in expected_values.items()):
         return None
+    if require_boundary_metadata:
+        valid_count = manifest.get("valid_timestamp_count")
+        first = manifest.get("first_valid_event_timestamp_local")
+        last = manifest.get("last_valid_event_timestamp_local")
+        if valid_count != manifest.get("valid_row_count"):
+            return None
+        if valid_count == 0 and (first is not None or last is not None):
+            return None
+        if valid_count:
+            try:
+                parsed = (datetime.fromisoformat(first), datetime.fromisoformat(last))
+            except (TypeError, ValueError):
+                return None
+            if any(value.tzinfo is not None for value in parsed):
+                return None
     reconciliation = manifest.get("reconciliation", {})
     if (
         not reconciliation.get("applicable")
@@ -101,6 +120,21 @@ def verify_completed_day(
         or (manifest.get("valid_row_count", 0) > 0 and parquet_evidence["codecs"] != ["SNAPPY"])
     ):
         return None
+    if require_boundary_metadata:
+        timestamps = (
+            pq.ParquetFile(paths.staging)
+            .read(columns=["event_timestamp_local"])
+            .column("event_timestamp_local")
+            .to_pylist()
+        )
+        expected_first = timestamps[0].isoformat() if timestamps else None
+        expected_last = timestamps[-1].isoformat() if timestamps else None
+        if (
+            len(timestamps) != manifest.get("valid_timestamp_count")
+            or expected_first != manifest.get("first_valid_event_timestamp_local")
+            or expected_last != manifest.get("last_valid_event_timestamp_local")
+        ):
+            return None
     quarantine_count = manifest.get("quarantine_row_count")
     if quarantine_count:
         if (
@@ -120,6 +154,89 @@ def verify_completed_day(
     ):
         return None
     return manifest
+
+
+def verify_completed_day(
+    paths: DailyPaths,
+    *,
+    source_identity: Mapping[str, object],
+    source_date: date,
+    pipeline_version: str,
+    processing_timestamp: str,
+    generated_raw_sha256: str,
+    generated_raw_byte_size: int,
+    generated_input_row_count: int,
+) -> dict[str, Any] | None:
+    """Validate a current completion manifest and every referenced generated file."""
+    manifest = _read_manifest(paths.manifest)
+    if manifest is None:
+        return None
+    return _verify_manifest(
+        manifest,
+        paths,
+        source_identity=source_identity,
+        source_date=source_date,
+        pipeline_version=pipeline_version,
+        processing_timestamp=processing_timestamp,
+        generated_raw_sha256=generated_raw_sha256,
+        generated_raw_byte_size=generated_raw_byte_size,
+        generated_input_row_count=generated_input_row_count,
+        manifest_version=MANIFEST_VERSION,
+        require_boundary_metadata=True,
+    )
+
+
+def _upgrade_legacy_manifest(
+    paths: DailyPaths,
+    *,
+    source_identity: Mapping[str, object],
+    source_date: date,
+    pipeline_version: str,
+    processing_timestamp: str,
+    generated_raw_sha256: str,
+    generated_raw_byte_size: int,
+    generated_input_row_count: int,
+) -> dict[str, Any] | None:
+    legacy = _read_manifest(paths.manifest)
+    if (
+        legacy is None
+        or _verify_manifest(
+            legacy,
+            paths,
+            source_identity=source_identity,
+            source_date=source_date,
+            pipeline_version=pipeline_version,
+            processing_timestamp=processing_timestamp,
+            generated_raw_sha256=generated_raw_sha256,
+            generated_raw_byte_size=generated_raw_byte_size,
+            generated_input_row_count=generated_input_row_count,
+            manifest_version=LEGACY_MANIFEST_VERSION,
+            require_boundary_metadata=False,
+        )
+        is None
+    ):
+        return None
+    timestamps = (
+        pq.ParquetFile(paths.staging)
+        .read(columns=["event_timestamp_local"])
+        .column("event_timestamp_local")
+        .to_pylist()
+    )
+    upgraded = dict(legacy)
+    upgraded.update(
+        {
+            "first_valid_event_timestamp_local": (
+                timestamps[0].isoformat() if timestamps else None
+            ),
+            "last_valid_event_timestamp_local": (
+                timestamps[-1].isoformat() if timestamps else None
+            ),
+            "manifest_version": MANIFEST_VERSION,
+            "valid_timestamp_count": len(timestamps),
+        }
+    )
+    write_text_atomic(paths.manifest, manifest_text(upgraded))
+    return upgraded
 
 
 def _outputs_exist(paths: DailyPaths) -> bool:
@@ -162,6 +279,18 @@ def publish_day(
         )
         if completed is not None:
             return DayOutcome("skipped", completed)
+        upgraded = _upgrade_legacy_manifest(
+            paths,
+            source_identity=source_identity,
+            source_date=source_date,
+            pipeline_version=pipeline_version,
+            processing_timestamp=processing_timestamp,
+            generated_raw_sha256=raw_sha256,
+            generated_raw_byte_size=raw_byte_size,
+            generated_input_row_count=raw_row_count,
+        )
+        if upgraded is not None:
+            return DayOutcome("manifest_upgraded", upgraded)
 
     paths.manifest.unlink(missing_ok=True)
     raw_matches = (

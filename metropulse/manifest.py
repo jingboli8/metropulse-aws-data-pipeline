@@ -13,7 +13,7 @@ from metropulse.local_paths import DailyPaths
 from metropulse.models import TransformationResult
 from metropulse.schema import SCHEMA_VERSION
 
-MANIFEST_VERSION = "1.0.0"
+MANIFEST_VERSION = "1.1.0"
 
 
 def _metrics(result: TransformationResult) -> dict[str, Any]:
@@ -59,6 +59,7 @@ def build_daily_manifest(
     """Build one portable completion manifest after all data outputs exist."""
     reconciliation = result.reconciliation
     quarantine_present = result.quarantine_row_count > 0
+    valid_timestamps = tuple(record.event_timestamp_local for record in result.valid_records)
     return {
         "batch_metrics": _metrics(result),
         "batch_warnings": [
@@ -70,6 +71,12 @@ def build_daily_manifest(
             for warning in result.batch_warnings
         ],
         "input_row_count": result.input_row_count,
+        "first_valid_event_timestamp_local": (
+            valid_timestamps[0].isoformat() if valid_timestamps else None
+        ),
+        "last_valid_event_timestamp_local": (
+            valid_timestamps[-1].isoformat() if valid_timestamps else None
+        ),
         "manifest_version": MANIFEST_VERSION,
         "pipeline_version": pipeline_version,
         "processing_timestamp": processing_timestamp,
@@ -96,6 +103,7 @@ def build_daily_manifest(
         "staging_relative_path": paths.staging_relative,
         "staging_sha256": staging_sha256,
         "valid_row_count": result.valid_row_count,
+        "valid_timestamp_count": len(valid_timestamps),
     }
 
 

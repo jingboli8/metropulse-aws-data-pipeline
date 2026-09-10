@@ -183,6 +183,7 @@ def _print_summary(summary: BackfillSummary) -> None:
         f"processed={evidence['processed_day_count']} "
         f"skipped={evidence['skipped_day_count']} "
         f"rebuilt={evidence['rebuilt_day_count']} "
+        f"manifest_upgraded={evidence['manifest_upgraded_day_count']} "
         f"failed={evidence['failed_day_count']}"
     )
     print(

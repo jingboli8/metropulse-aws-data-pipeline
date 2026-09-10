@@ -135,8 +135,27 @@ file, confirmed the contracted timezone-naive schema, and found no absolute driv
 The first run took 146.150546 seconds. An identical second run verified all referenced
 checksums and skipped all 212 days with processed/rebuilt/failed counts of zero.
 
-Gap observations remain batch evidence: 268 gaps greater than 60 seconds across 145
-days. They did not quarantine or impute rows. See the
+Daily validation found 268 gaps greater than 60 seconds within daily objects. The global
+continuity audit found another 63 gaps across adjacent object boundaries, giving the full
+chronological total of 331 reported by Phase -1. Abnormal positive intervals similarly
+reconcile as 306 within objects plus 63 at boundaries, or 369 globally. These audit
+observations did not quarantine or impute rows.
+
+Per-object validation cannot see the preceding or following object. The local global
+audit owns cross-object continuity evidence; the future scheduled EventBridge audit job
+will own that check in AWS. Run the same local audit with:
+
+```powershell
+.\.venv\Scripts\python.exe -m metropulse.global_audit `
+  --output-root data\local-lake `
+  --evidence artifacts\phase2-global-audit.json `
+  --expected-global-gap-count 331
+```
+
+Resume skipped transformation for all 212 partitions, but integrity-first resume still
+streams the source and hashes referenced raw, Parquet, and quarantine files. It proves
+idempotency and corruption detection; it does not promise a dramatic wall-clock speedup.
+See the
 [local backfill operations guide](docs/local-backfill-operations.md) for recovery,
 focused-date runs, forced rebuilds, and independent verification.
 
