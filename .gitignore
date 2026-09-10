@@ -1,0 +1,27 @@
+# Dataset artifacts (never commit source or derived data)
+data/
+data/raw/
+data/staged/
+data/processed/
+*.zip
+*.csv
+*.parquet
+
+# Python
+/build/
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Terraform and local configuration
+.terraform/
+*.tfstate
+*.tfstate.*
+.env
+.env.*
+
+# Generated feasibility output (reproducible, but may contain bulky profiling detail)
+artifacts/
