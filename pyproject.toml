@@ -12,6 +12,10 @@ dependencies = [
   "pyarrow>=17,<22",
 ]
 
+[project.scripts]
+metropulse-backfill = "metropulse.backfill:main"
+metropulse-verify-local = "metropulse.acceptance:main"
+
 [project.optional-dependencies]
 dev = [
   "pytest>=8,<10",

@@ -48,8 +48,8 @@ S3, Lambda, or Terraform work begins.
 - Offline execution of the Phase 1 validator and daily Snappy Parquet writer for local
   evidence. Production ingestion still uploads daily CSV to raw and lets S3 invoke the
   validator; local Parquet is an ignored test artifact.
-- Optional upload command with dry-run and explicit bucket/region arguments, separated
-  from splitting so tests require no AWS access.
+- Independent local acceptance verification for row counts, checksums, Parquet schema
+  and codec, portable paths, and aggregate reconciliation.
 
 **Acceptance criteria**
 
@@ -67,8 +67,8 @@ S3, Lambda, or Terraform work begins.
 - One full local reconciliation run against the ignored verified dataset, recorded as
   summarized evidence rather than committed raw/generated files.
 
-**AWS resources affected:** none during required tests. A later, explicitly approved
-upload uses the Phase 4 data bucket but creates no infrastructure.
+**AWS resources affected:** none. Upload and AWS adapter behavior begin only in later
+reviewed phases.
 
 **Stop point:** local split and Parquet evidence reconcile; do not upload or implement a
 Lambda adapter until review.

@@ -7,8 +7,8 @@ signals on one metro train Air Production Unit (APU). It is operational train te
 not manufacturing production-line data and not a table of confirmed failures.
 
 The repository contains the Phase -1 feasibility study, Phase 0 architecture contracts,
-and the Phase 1 AWS-independent validation core. It does not deploy or operate the AWS
-pipeline described below.
+the Phase 1 AWS-independent validation core, and the completed Phase 2 local daily
+backfill. It does not deploy or operate the AWS pipeline described below.
 
 ## Proposed pipeline
 
@@ -103,12 +103,50 @@ Run every offline test and quality check with:
 .\.venv\Scripts\python.exe -m pytest -q
 ```
 
+## Phase 2 local backfill
+
+The local-only backfill streams the verified UCI ZIP member, preserves the source CSV
+header and values in daily raw files, calls `metropulse.transform_daily_csv` for each day,
+and publishes explicit-schema Snappy Parquet plus a checksum manifest. It neither uses
+AWS nor downloads data.
+
+```powershell
+.\.venv\Scripts\python.exe -m metropulse.backfill `
+  --archive data\raw\metropt-3-dataset.zip `
+  --output-root data\local-lake `
+  --processing-timestamp 2026-09-10T00:00:00 `
+  --pipeline-version 2.0.0
+```
+
+Generated files mirror future lake zones under the ignored `data/local-lake/` tree:
+
+```text
+raw/source=metropt3/source_date=YYYY-MM-DD/data.csv
+staging/source=metropt3/year=YYYY/month=MM/day=DD/data.parquet
+quarantine/source=metropt3/source_date=YYYY-MM-DD/rejected.jsonl
+control/source=metropt3/source_date=YYYY-MM-DD/manifest.json
+```
+
+The verified full local run produced 212 raw CSV files, 212 staging Parquet files, and
+212 manifests for 1,516,948 rows from 2020-02-01 through 2020-09-01. All rows validated,
+so the actual quarantine result was zero files and zero rows. Independent inspection
+reconciled raw rows = Parquet rows + quarantine rows, confirmed Snappy on every Parquet
+file, confirmed the contracted timezone-naive schema, and found no absolute drive paths.
+The first run took 146.150546 seconds. An identical second run verified all referenced
+checksums and skipped all 212 days with processed/rebuilt/failed counts of zero.
+
+Gap observations remain batch evidence: 268 gaps greater than 60 seconds across 145
+days. They did not quarantine or impute rows. See the
+[local backfill operations guide](docs/local-backfill-operations.md) for recovery,
+focused-date runs, forced rebuilds, and independent verification.
+
 ## Design documents
 
 - [Architecture](docs/architecture.md)
 - [Data contract](docs/data-contract.md)
 - [Data-quality rules](docs/data-quality-rules.md)
 - [Implementation plan](docs/implementation-plan.md)
+- [Local backfill operations](docs/local-backfill-operations.md)
 - Architecture decisions: [source ingestion](docs/adr/001-source-ingestion.md),
   [timestamp semantics](docs/adr/002-timestamp-semantics.md),
   [idempotency](docs/adr/003-idempotency.md),
