@@ -44,7 +44,7 @@ authoritative domain source and a versioned contract change.
 |---|---|---|---|
 | `BATCH_TIMESTAMP_ORDER` | Warning + metric | Count adjacent parsed timestamps that decrease in source order. | Complete valid output; report transition count. |
 | `BATCH_SAMPLING_INTERVAL` | Warning + metric | Count positive adjacent intervals outside 9-13 seconds; publish the interval distribution summary. | Complete valid output; do not reject either row. |
-| `BATCH_SIGNIFICANT_GAP` | Warning + metric | Count adjacent positive intervals greater than 60 seconds, the Phase -1 documented threshold. | Complete valid output; do not impute and do not reject rows around a gap. |
+| `BATCH_SIGNIFICANT_GAP` | Warning + metric | Count adjacent positive intervals greater than 60 seconds within one input object, using the Phase -1 documented threshold. | Complete valid output; do not impute and do not reject rows around a gap. |
 | `BATCH_LOW_ROW_COUNT` | Warning + metric | Daily input has fewer than 3,718 rows, approximately half the observed median of 7,435. | Complete if otherwise valid; report the sparse date. Threshold is configuration, not a row rule. |
 | `BATCH_QUARANTINE_RATE` | Metric | Rejected rows divided by input rows, plus counts by rule ID. | Complete after reconciliation; CloudWatch alarm evaluates spikes. |
 | `BATCH_DURATION` | Metric | End-to-end validation or compaction duration. | No validity effect. |
@@ -81,6 +81,36 @@ set to partially publish. The audit still records their metrics and failure stat
 Monthly compaction may legitimately have no quarantine rows. “As appropriate” means the
 monthly audit selects quarantine counts from the same daily input identities as staging;
 it never compares unrelated attempts or pipeline versions.
+
+## Cross-partition continuity audit
+
+Daily validation remains scoped to one raw object and cannot observe an unseen previous
+or next object. Each daily completion manifest therefore records the first and last valid
+`event_timestamp_local` values and the valid timestamp count. A separate global audit
+sorts manifests by `source_date`, combines their within-object sampling distributions,
+and measures the boundary from one partition's last valid timestamp to the next
+partition's first valid timestamp. The future scheduled EventBridge audit job owns this
+cross-object check in AWS.
+
+| Rule ID | Class | Condition | Result |
+|---|---|---|---|
+| `AUDIT_BOUNDARY_SIGNIFICANT_GAP` | Audit warning + metric | A computable adjacent-partition boundary exceeds 60 seconds. | Count the boundary gap; do not reject or impute either row. |
+| `AUDIT_MISSING_CALENDAR_DATE` | Audit warning + metric | Consecutive observed manifests have one or more missing calendar dates. | Record the missing dates and still measure the available endpoints. |
+| `AUDIT_BOUNDARY_OVERLAP` | Audit warning + metric | The next first valid timestamp equals or precedes the previous last valid timestamp. | Record overlap; a negative delta is also a reversed-boundary finding. |
+| `AUDIT_BOUNDARY_UNASSESSABLE` | Audit warning | Either adjacent partition has no valid timestamps because it is empty or fully quarantined. | Do not bridge over the partition; mark the audit incomplete rather than inventing a delta. |
+
+Normally adjacent dates are measured directly, including a normal 9-13 second boundary.
+Missing calendar dates remain visible and their available boundary is measured. Empty or
+fully quarantined partitions make their immediate boundaries unassessable. Under the
+daily contract, an empty input has no completion manifest and appears as a missing
+partition; a fully quarantined partition has null boundary timestamps. If an audited
+manifest explicitly represents either case, the audit does not bridge across it.
+Overlapping and reversed boundaries are findings, never row-quarantine rules.
+
+For the verified dataset, daily manifests independently reconfirm 268 within-partition
+gaps greater than 60 seconds. Ordered boundary auditing adds 63, so `268 + 63 = 331`,
+matching the Phase -1 chronological total. Abnormal positive intervals reconcile as
+`306 + 63 = 369`. No interval is imputed.
 
 ## Evaluation order and reporting
 
