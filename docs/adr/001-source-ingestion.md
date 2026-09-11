@@ -20,7 +20,7 @@ archive to landing for provenance when an AWS environment is explicitly in use.
 Daily raw keys are deterministic:
 
 ```text
-raw/source=uci-metropt3/source_date=YYYY-MM-DD/metropt3-YYYY-MM-DD.csv
+raw/source=metropt3/source_date=YYYY-MM-DD/data.csv
 ```
 
 The splitter preserves source values and source headers, including the blank first header

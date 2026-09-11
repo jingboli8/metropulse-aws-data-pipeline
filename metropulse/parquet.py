@@ -50,6 +50,29 @@ def write_daily_parquet(
     processing_timestamp: str,
 ) -> tuple[str, int]:
     """Write one explicit-schema Snappy Parquet file and return checksum and size."""
+    payload = serialize_daily_parquet(
+        records,
+        pipeline_version=pipeline_version,
+        source_identity=source_identity,
+        source_date=source_date,
+        raw_sha256=raw_sha256,
+        processing_timestamp=processing_timestamp,
+    )
+    with atomic_output_path(final_path) as temporary_path:
+        temporary_path.write_bytes(payload)
+    return sha256_file(final_path), final_path.stat().st_size
+
+
+def serialize_daily_parquet(
+    records: Sequence[NormalizedRecord],
+    *,
+    pipeline_version: str,
+    source_identity: Mapping[str, object],
+    source_date: date,
+    raw_sha256: str,
+    processing_timestamp: str,
+) -> bytes:
+    """Serialize daily records as explicit-schema Snappy Parquet bytes."""
     schema = parquet_schema(
         pipeline_version=pipeline_version,
         source_identity=source_identity,
@@ -58,16 +81,16 @@ def write_daily_parquet(
         processing_timestamp=processing_timestamp,
     )
     table = pa.Table.from_pylist([record.to_dict() for record in records], schema=schema)
-    with atomic_output_path(final_path) as temporary_path:
-        pq.write_table(
-            table,
-            temporary_path,
-            compression="snappy",
-            use_dictionary=False,
-            write_statistics=True,
-            version="2.6",
-        )
-    return sha256_file(final_path), final_path.stat().st_size
+    sink = pa.BufferOutputStream()
+    pq.write_table(
+        table,
+        sink,
+        compression="snappy",
+        use_dictionary=False,
+        write_statistics=True,
+        version="2.6",
+    )
+    return sink.getvalue().to_pybytes()
 
 
 def inspect_daily_parquet(path: Path) -> dict[str, object]:

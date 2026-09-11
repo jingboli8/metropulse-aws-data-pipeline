@@ -69,6 +69,10 @@ splits the 218 MB CSV. AWS receives an immutable archive for provenance and one 
 per source date. AWS runtime code never downloads from UCI and no Lambda rescans the
 monolithic source file.
 
+Phase 3 implements and tests the validator's event, storage, idempotency, and
+observability adapters using in-memory S3. The diagram remains the intended AWS runtime:
+packaging, notifications, IAM, and every AWS resource are still planned for Phase 4.
+
 ## Event and processing flow
 
 1. The local CLI verifies the official ZIP against the recorded SHA-256, safely extracts
@@ -100,10 +104,10 @@ monolithic source file.
 | Zone | Example key | Writer | Readers | Retention intent |
 |---|---|---|---|---|
 | Landing/source archive | `landing/source=uci-metropt3/sha256=<digest>/metropt-3-dataset.zip` | Backfill CLI | Audit/operator | Long-lived immutable provenance copy |
-| Raw | `raw/source=uci-metropt3/source_date=2020-02-01/metropt3-2020-02-01.csv` | Backfill CLI | Validator, audit | Long-lived replay source; preserve daily CSV |
-| Staging | `staging/source=uci-metropt3/source_date=2020-02-01/input_id=<id>/part-00000.snappy.parquet` | Validator | Compactor, audit | Temporary; expire after curated retention buffer |
+| Raw | `raw/source=metropt3/source_date=2020-02-01/data.csv` | Backfill CLI | Validator, audit | Long-lived replay source; preserve daily CSV |
+| Staging | `staging/source=metropt3/year=2020/month=02/day=01/input_id=<id>/data.parquet` | Validator | Compactor, audit | Temporary; expire after curated retention buffer |
 | Curated | `curated/metropt3/year=2020/month=02/run_id=<id>/part-00000.snappy.parquet` | Compactor | Glue/Athena, audit | Query-ready retained data |
-| Quarantine | `quarantine/source=uci-metropt3/source_date=2020-02-01/input_id=<id>/rejected.jsonl.gz` | Validator | Compactor reconciliation, audit/operator | Retain long enough to diagnose/reprocess |
+| Quarantine | `quarantine/source=metropt3/source_date=2020-02-01/input_id=<id>/rejected.jsonl` | Validator | Compactor reconciliation, audit/operator | Retain long enough to diagnose/reprocess |
 | Control | `control/validation/input_id=<id>/completed.json` | Validator/compactor/auditor | Pipeline components, operator | Claims, immutable manifests, audit results |
 | Athena results | `s3://<query-results-bucket>/<workgroup>/...` | Athena | Authorized analyst | Short lifecycle; isolated from data zones |
 
@@ -119,9 +123,10 @@ bucket/key, the best immutable object identity available (version ID, then check
 then ETag), and pipeline version. Deterministic keys and conditional S3 control markers
 make duplicate delivery safe without DynamoDB.
 
-A concurrent invocation must acquire a conditional claim. If another active claim or a
-completed marker exists, it exits successfully without publishing terminal row-count
-metrics. A stale claim may be replaced only with an ETag precondition. Outputs use
+A concurrent invocation must acquire a conditional claim. A verified completed marker
+returns a duplicate success without publishing terminal row-count metrics; an active
+claim fails retryably. A stale claim may be replaced only with an ETag precondition.
+Outputs use
 deterministic keys, so a retry replaces its own incomplete output rather than appending.
 The completion marker is written only after staging/quarantine uploads and reconciliation
 succeed. A retry after partial failure reconstructs both outputs and then completes.

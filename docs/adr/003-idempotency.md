@@ -40,6 +40,13 @@ Validation follows this protocol:
    marker emits terminal input/valid/quarantine row metrics. Attempt and error metrics may
    still count every invocation. Mark the claim completed or let lifecycle policy expire it.
 
+Phase 3 fixes claim lifetime at 16 minutes, one minute beyond Lambda's maximum execution
+time. The deterministic data-processing timestamp is the source object's `LastModified`
+value in UTC, with S3 event time as fallback; the operational current-time clock affects
+only claim expiry. Completion verification recalculates referenced object SHA-256 values
+and checks their sizes and checksum metadata. An active claim fails retryably, while a
+stale claim is replaced only through `If-Match` on its current ETag.
+
 The stale threshold prevents a previous live Lambda from writing after takeover. A retry
 after partial failure rewrites only its deterministic outputs and repeats verification;
 absence of `completed.json` means they are not published. Compaction uses the same claim,

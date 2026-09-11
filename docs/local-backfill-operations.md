@@ -39,11 +39,10 @@ data/local-lake/
   control/source=metropt3/source_date=YYYY-MM-DD/manifest.json
 ```
 
-This local layout uses the concise `source=metropt3` value specified for Phase 2. The
-planned AWS keys use `source=uci-metropt3` and add an immutable input identity where
-concurrent event delivery requires it. Locally, the source checksum and pipeline version
-are recorded inside every completion manifest, and the deterministic daily path has one
-writer.
+The Phase 3 AWS adapter keeps the same `source=metropt3` raw key and adds an immutable
+input identity to staging, quarantine, and control keys where concurrent event delivery
+requires it. Locally, the source checksum and pipeline version are recorded inside every
+completion manifest, and the deterministic daily path has one writer.
 
 Daily raw CSV preserves the exact source header, row order, and field values. Staging is
 one explicit-schema Snappy Parquet file per day and is never appended in place.

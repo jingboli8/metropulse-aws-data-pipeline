@@ -7,8 +7,9 @@ signals on one metro train Air Production Unit (APU). It is operational train te
 not manufacturing production-line data and not a table of confirmed failures.
 
 The repository contains the Phase -1 feasibility study, Phase 0 architecture contracts,
-the Phase 1 AWS-independent validation core, and the completed Phase 2 local daily
-backfill. It does not deploy or operate the AWS pipeline described below.
+the Phase 1 AWS-independent validation core, the Phase 2 local daily backfill, and the
+Phase 3 offline-tested S3/Lambda adapter. It does not deploy or operate the AWS pipeline
+described below.
 
 ## Proposed pipeline
 
@@ -159,6 +160,30 @@ See the
 [local backfill operations guide](docs/local-backfill-operations.md) for recovery,
 focused-date runs, forced rebuilds, and independent verification.
 
+## Phase 3 S3/Lambda adapter
+
+Phase 3 adds strict S3 `ObjectCreated` event parsing, deterministic daily output keys,
+bounded object verification, conditional S3 claims and completion markers, stable JSON
+logs, and CloudWatch Embedded Metric Format records. The handler is thin and all tests
+use injected in-memory clients; no AWS calls or deployment occurred.
+
+The offline real-day acceptance processed the median-sized generated raw partition for
+2020-02-11: 7,431 input rows became 7,431 explicit-schema Snappy Parquet rows with zero
+quarantine rows. A completion marker was published, the second invocation returned
+`duplicate_skipped`, and the fake object contents remained byte-for-byte unchanged.
+
+```powershell
+.\.venv\Scripts\python.exe -m metropulse.aws.acceptance `
+  --raw data\local-lake\raw\source=metropt3\source_date=2020-02-11\data.csv `
+  --source-date 2020-02-11 `
+  --pipeline-version 3.0.0 `
+  --evidence artifacts\phase3-fake-s3-acceptance.json
+```
+
+See the [Lambda processing contract](docs/lambda-processing-contract.md) and
+[observability contract](docs/observability.md). Lambda packaging and AWS infrastructure
+remain Phase 4 decisions; this repository does not yet claim a deployable handler.
+
 ## Design documents
 
 - [Architecture](docs/architecture.md)
@@ -166,6 +191,8 @@ focused-date runs, forced rebuilds, and independent verification.
 - [Data-quality rules](docs/data-quality-rules.md)
 - [Implementation plan](docs/implementation-plan.md)
 - [Local backfill operations](docs/local-backfill-operations.md)
+- [Lambda processing contract](docs/lambda-processing-contract.md)
+- [Structured observability](docs/observability.md)
 - Architecture decisions: [source ingestion](docs/adr/001-source-ingestion.md),
   [timestamp semantics](docs/adr/002-timestamp-semantics.md),
   [idempotency](docs/adr/003-idempotency.md),
