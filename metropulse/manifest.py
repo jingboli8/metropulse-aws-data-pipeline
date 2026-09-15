@@ -16,7 +16,8 @@ from metropulse.schema import SCHEMA_VERSION
 MANIFEST_VERSION = "1.1.0"
 
 
-def _metrics(result: TransformationResult) -> dict[str, Any]:
+def batch_metrics_payload(result: TransformationResult) -> dict[str, Any]:
+    """Return the portable manifest representation of batch metrics."""
     metrics = result.batch_metrics
     return {
         "abnormal_sampling_interval_count": metrics.abnormal_sampling_interval_count,
@@ -61,7 +62,7 @@ def build_daily_manifest(
     quarantine_present = result.quarantine_row_count > 0
     valid_timestamps = tuple(record.event_timestamp_local for record in result.valid_records)
     return {
-        "batch_metrics": _metrics(result),
+        "batch_metrics": batch_metrics_payload(result),
         "batch_warnings": [
             {
                 "message": warning.message,

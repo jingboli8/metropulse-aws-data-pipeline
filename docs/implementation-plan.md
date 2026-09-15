@@ -73,7 +73,7 @@ reviewed phases.
 **Stop point:** local split and Parquet evidence reconcile; do not upload or implement a
 Lambda adapter until review.
 
-## Phase 3: S3/Lambda event adapter and quarantine path
+## Phase 3: S3/Lambda event adapter and quarantine path — implemented locally
 
 **Deliverables**
 
@@ -82,7 +82,8 @@ Lambda adapter until review.
 - Validation Lambda handler that calls the Phase 1 core and writes staging, quarantine,
   claims, and completion manifests.
 - Prefix/suffix notification contract limited to `raw/` and `.csv`, bounded retries,
-  structured logs, failure alarms, and packaged Lambda artifact.
+  structured logs, and Embedded Metric Format output. Alarm resources and packaging stay
+  in Phase 4.
 
 **Acceptance criteria**
 
@@ -103,7 +104,8 @@ Lambda adapter until review.
 its IAM role/log group, S3 notification, and CloudWatch failure alarm; none is provisioned
 until Phase 4.
 
-**Stop point:** adapter and handler tests pass locally; no AWS deployment begins.
+**Stop point:** adapter, handler, and real-day fake-S3 acceptance pass locally; no AWS
+deployment or packaging begins.
 
 ## Phase 4: Terraform infrastructure
 
@@ -114,6 +116,8 @@ until Phase 4.
   least-privilege IAM, log retention, notifications, retry configuration, and alarms.
 - Environment variables/inputs with development schedules disabled by default. Common
   tags include project, environment, owner, managed-by, and cost-center/purpose.
+- A reviewed packaging decision between a zip with a compatible PyArrow layer and a
+  container image, followed by reproducible build and runtime verification.
 - `terraform fmt`, validation, plan workflow, remote-state decision, and documented
   deploy/destroy commands. State and plan files remain ignored and contain no secrets.
 

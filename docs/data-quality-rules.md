@@ -92,6 +92,11 @@ and measures the boundary from one partition's last valid timestamp to the next
 partition's first valid timestamp. The future scheduled EventBridge audit job owns this
 cross-object check in AWS.
 
+The Phase 3 event adapter preserves this boundary: it emits each object's existing batch
+metrics but does not infer a boundary interval from unrelated notifications. Delivery
+order is not chronological evidence. The scheduled/global audit remains responsible for
+ordered cross-object continuity.
+
 | Rule ID | Class | Condition | Result |
 |---|---|---|---|
 | `AUDIT_BOUNDARY_SIGNIFICANT_GAP` | Audit warning + metric | A computable adjacent-partition boundary exceeds 60 seconds. | Count the boundary gap; do not reject or impute either row. |

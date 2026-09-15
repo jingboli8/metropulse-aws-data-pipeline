@@ -18,7 +18,7 @@ Each raw object is UTF-8 CSV with the original 17-column header and data rows fr
 exactly one derived `source_date`. The object key is:
 
 ```text
-raw/source=uci-metropt3/source_date=YYYY-MM-DD/metropt3-YYYY-MM-DD.csv
+raw/source=metropt3/source_date=YYYY-MM-DD/data.csv
 ```
 
 The local splitter preserves source values and source names, including the blank first
@@ -131,7 +131,7 @@ publication and raises an audit failure.
 
 ## Quarantine record contract
 
-Quarantine uses compressed UTF-8 JSON Lines so malformed CSV records and structured
+Quarantine uses UTF-8 JSON Lines so malformed CSV records and structured
 rejection metadata can coexist. One JSON object represents one rejected source record.
 
 | Field | Type | Nullable | Description |
