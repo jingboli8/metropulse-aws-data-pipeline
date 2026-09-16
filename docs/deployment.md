@@ -63,12 +63,20 @@ terraform -chdir=infra/bootstrap test
 terraform -chdir=infra/platform init -backend=false
 terraform -chdir=infra/platform validate
 terraform -chdir=infra/platform test
+terraform -chdir=infra/query init -backend=false
+terraform -chdir=infra/query validate
+terraform -chdir=infra/query test
 terraform fmt -check -recursive infra
 ```
 
 Do not run `plan` or `apply` merely to validate this repository. No remote-state backend
 is configured. `.terraform/`, plans, overrides, variable files, crash logs, and state are
-ignored; both signed dependency lock files are tracked.
+ignored; each root's signed dependency lock file is tracked.
+
+The query root consumes explicit bucket-name inputs rather than remote state. Its future
+apply follows `infra/platform` and also requires the reviewed 12-digit expected owner of
+the results bucket. Phase 5 creates an empty table contract only: do not run Athena SQL
+until Phase 6 has published and explicitly registered approved curated partitions.
 
 ## Future bootstrap and release sequence
 

@@ -212,6 +212,25 @@ makes no AWS call or push. See the [deployment runbook](docs/deployment.md),
 implemented and locally validated; nothing has been deployed and AWS evidence does not
 yet exist.
 
+## Phase 5 query-layer contracts
+
+Phase 5 defines a separate `infra/query` Terraform root containing an explicit Glue
+database, an external Snappy Parquet table, and an Athena engine version 3 workgroup. The
+table catalogs curated monthly data only, uses `year` and `month` partition columns, and
+has partition projection disabled. It currently has no partitions because monthly
+compaction begins in Phase 6; daily staging is intentionally unsupported for analytics.
+
+The workgroup enforces an SSE-S3 result location in the isolated results bucket, expected
+bucket ownership, and a 256 MiB per-query scan cutoff. Existing S3 lifecycle policy
+expires query results after 30 days. Version-controlled queries under `sql/` demonstrate
+partition-pruned counts and aggregates plus one intentional complete-history gap query.
+Source timestamps remain timezone-unknown local values.
+
+See the [query-layer contract](docs/query-layer.md) and
+[curated partition ADR](docs/adr/007-curated-partition-publication.md). These definitions
+have only offline evidence: no Glue/Athena resources, curated partitions, result files,
+bytes-scanned measurements, or real queries exist yet.
+
 ## Design documents
 
 - [Architecture](docs/architecture.md)
@@ -224,12 +243,14 @@ yet exist.
 - [Deployment and recovery](docs/deployment.md)
 - [Security controls](docs/security.md)
 - [Cost controls](docs/cost-control.md)
+- [Glue and Athena query layer](docs/query-layer.md)
 - Architecture decisions: [source ingestion](docs/adr/001-source-ingestion.md),
   [timestamp semantics](docs/adr/002-timestamp-semantics.md),
   [idempotency](docs/adr/003-idempotency.md),
   [small-file compaction](docs/adr/004-small-file-compaction.md), and
   [schema normalization](docs/adr/005-schema-normalization.md), and
-  [Lambda packaging](docs/adr/006-lambda-packaging.md)
+  [Lambda packaging](docs/adr/006-lambda-packaging.md), and
+  [curated partition publication](docs/adr/007-curated-partition-publication.md)
 - Phase -1 evidence: [data source](docs/data-source.md) and
   [feasibility report](docs/feasibility-report.md)
 

@@ -33,6 +33,19 @@ depends on that permission and filters exactly to `raw/source=metropt3/` plus `d
 so generated staging, quarantine, and control keys cannot recursively invoke the
 function.
 
+## Query-layer boundary
+
+The Phase 5 Glue table points only to `curated/metropt3/`; it does not expose raw,
+staging, quarantine, or control objects. Partition projection and crawlers are disabled,
+and no partitions exist until Phase 6 approves an immutable monthly run. The Athena
+workgroup overrides client settings with the isolated results prefix, expected bucket
+owner, SSE-S3 encryption, and a 256 MiB query cutoff.
+
+Phase 5 adds no analyst role, compactor role, or permission to the validation Lambda.
+Future query principals should receive only workgroup execution, read-only catalog
+metadata, curated-object reads, and access to the one query-result prefix. Those IAM
+policies require a separately reviewed deployment phase.
+
 ## Supply chain and runtime
 
 The Docker base uses an official AWS Lambda Python 3.12 Linux amd64 image manifest

@@ -151,41 +151,75 @@ phases.
 **Stop point:** local Terraform and externally executed container verification pass; do
 not plan/apply, push, deploy, or start compaction.
 
-## Phase 5: Monthly compaction and Glue/Athena
+## Phase 5: Glue Data Catalog and Athena query contracts
+
+**Status:** Implemented and locally validated as an offline query-definition phase.
 
 **Deliverables**
 
-- Monthly compaction core and thin scheduled Lambda adapter using exact completed daily
-  manifest sets and deterministic run IDs/keys.
-- Curated Snappy Parquet partitioned by `year` and `month`, publication manifest, Glue
-  database/table, partition registration, and Athena workgroup with enforced result path
-  and scan limits.
-- Representative Athena SQL demonstrating row counts, date filtering, and signal queries
-  without treating every row as a failure.
+- Separate Terraform root for an explicit Glue database and curated Parquet table plus an
+  Athena workgroup with enforced encrypted results and a per-query scan cutoff.
+- Curated-only schema with `year` and `month` partition columns, no crawler, no partition
+  projection, and no partitions before curated output exists.
+- Version-controlled Athena SQL for daily counts, analogue aggregates, digital-state
+  rates, and observed timestamp gaps without treating telemetry rows as failures.
+- Offline Terraform mock tests and repository contract tests. No AWS call or deployment
+  evidence is part of this phase.
 
 **Acceptance criteria**
 
-- About 212 daily staging units compact to roughly seven monthly units for this dataset;
-  no append-in-place writes occur. Monthly row equations pass before catalog publication.
-- Glue/Athena sees only curated schema and partitions. Timezone status is visible and no
-  query or schema claims UTC.
-- Reruns with the same manifest set are idempotent; a changed input or pipeline version
-  produces a new run identity.
+- The Glue table exactly matches the normalized Parquet contract, catalogs only the
+  curated root, and has no registered partitions.
+- Athena workgroup settings override clients, use SSE-S3 in the isolated results bucket,
+  enable metrics, and cap each query at 256 MiB by default.
+- SQL preserves timezone-unknown semantics, uses explicit columns, and distinguishes
+  row-derived observations from control-plane reconciliation evidence.
 
 **Tests**
 
-- Unit tests for month selection, stable manifest ordering/run IDs, boundary dates,
-  reconciliation, deterministic ordering, and partial failures.
-- Parquet schema/row-count integration tests and, when authorized, Athena smoke queries
-  with recorded bytes scanned and query results.
+- Terraform format/init/validate and mocked-provider assertions for catalog, table,
+  workgroup, result controls, tags, and excluded resources.
+- Offline repository tests for exact schema/partition order and SQL safety contracts.
 
-**AWS resources affected:** compaction Lambda and IAM/log group, Glue database/table,
-Athena workgroup and named query-result prefix; EventBridge schedule remains disabled.
+**AWS resources affected:** definitions for one Glue database, one Glue external table,
+and one Athena workgroup. Nothing is created during this phase.
 
-**Stop point:** curated reconciliation and Athena smoke evidence pass; do not enable
-schedules or alarms.
+**Stop point:** offline query-layer contracts pass; do not compact data, register
+partitions, deploy, or claim real Athena query evidence.
 
-## Phase 6: CloudWatch metrics, alarms, and scheduled audit
+## Phase 6: Monthly compaction and curated partition publication
+
+**Deliverables**
+
+- Monthly compaction core and thin adapter using exact completed daily manifest sets,
+  deterministic run identities, and immutable curated keys.
+- Snappy Parquet publication ordered by local event timestamp and record index, monthly
+  completion manifests, checksum verification, and row reconciliation.
+- Explicit Glue year/month partition creation or replacement pointing to one approved
+  immutable `run_id` only after completion succeeds.
+
+**Acceptance criteria**
+
+- Approximately 212 daily validation units compact to roughly seven monthly units; no
+  append-in-place write occurs.
+- Curated rows equal the valid rows from the exact selected daily completions, and source
+  rows equal curated plus associated quarantine rows.
+- Repeated identical inputs produce the same run identity. A changed input set publishes
+  a new immutable run before atomically changing the catalog partition location.
+
+**Tests**
+
+- Unit tests for selection, ordering, run identity, reconciliation, publication order,
+  partial failure, and partition replacement.
+- Full local Parquet schema, codec, row-count, and representative SQL-fixture checks.
+
+**AWS resources affected:** future compaction Lambda/role/log group and Glue partition
+updates. No EventBridge schedule is enabled.
+
+**Stop point:** local compaction and partition-publication contracts pass; do not deploy,
+schedule, or add alarms.
+
+## Phase 7: CloudWatch metrics, alarms, and scheduled audit
 
 **Deliverables**
 
@@ -217,7 +251,7 @@ CloudWatch custom metrics, alarms, dashboard, and log groups.
 
 **Stop point:** observability evidence passes and development schedules are disabled.
 
-## Phase 7: GitHub Actions, end-to-end evidence, README polish, and teardown
+## Phase 8: GitHub Actions, end-to-end evidence, README polish, and teardown
 
 **Deliverables**
 
