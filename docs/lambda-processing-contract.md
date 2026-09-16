@@ -4,8 +4,9 @@
 
 Phase 3 implements an offline-tested adapter for one daily S3 raw object. The Lambda
 entry point is `metropulse.aws.lambda_handler.lambda_handler`; the independently testable
-orchestrator is `metropulse.aws.processor.ObjectProcessor.process`. Packaging, IAM, event
-notification configuration, and deployment remain Phase 4 work.
+orchestrator is `metropulse.aws.processor.ObjectProcessor.process`. Phase 4 defines the
+container, IAM, event notification, and runtime configuration. The user-run Linux amd64
+container verification passed; nothing has been deployed.
 
 The handler parses each S3 record and delegates it. Schema parsing, row validation,
 normalization, batch metrics, Parquet schema, and quarantine construction remain in the
@@ -129,9 +130,10 @@ The handler requires these non-secret environment variables:
 | `METROPULSE_ENVIRONMENT` | Low-cardinality observability dimension. |
 | `METROPULSE_DESTINATION_BUCKET` | Output bucket, independent of input bucket. |
 
-Development configuration uses 20 MiB as a practical starting limit: it leaves ample
-headroom above the observed daily objects while remaining bounded. Phase 4 must expose
-the value through Terraform and verify it against the packaged Lambda memory budget.
+Terraform defaults to a 25 MiB limit as a practical starting point: it leaves ample
+headroom above the observed daily objects while remaining bounded. It pairs that limit
+with 2,048 MiB memory, a five-minute timeout, and 1,024 MiB `/tmp`; all remain reviewed
+deployment variables.
 
 Run a local fake-S3 acceptance against an existing ignored daily partition:
 
@@ -145,6 +147,6 @@ Run a local fake-S3 acceptance against an existing ignored daily partition:
 
 The command reads a local file and uses `InMemoryObjectStorage`; it makes no AWS or
 network call. Detailed evidence remains ignored. The optional `aws` dependency group
-documents boto3 for local adapter work. Lambda supplies the AWS SDK, but Phase 4 must
-choose and verify either a zip plus PyArrow layer or a container image before the handler
-can be called deployable.
+documents boto3 for local adapter work. Lambda supplies the AWS SDK. ADR 006 selects a
+digest-pinned Python 3.12 Linux amd64 container for PyArrow portability. The external
+Docker verification passed, and no deployed-handler claim is made.

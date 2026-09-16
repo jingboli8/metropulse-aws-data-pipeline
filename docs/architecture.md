@@ -70,8 +70,11 @@ per source date. AWS runtime code never downloads from UCI and no Lambda rescans
 monolithic source file.
 
 Phase 3 implements and tests the validator's event, storage, idempotency, and
-observability adapters using in-memory S3. The diagram remains the intended AWS runtime:
-packaging, notifications, IAM, and every AWS resource are still planned for Phase 4.
+observability adapters using in-memory S3. Phase 4 adds the externally verified Linux
+amd64 Lambda container definition and locally validated Terraform for ECR, private S3
+storage, IAM, the log group, Lambda, and the raw-object notification. Nothing has been
+deployed. The scheduled audit, compactor, catalog, and query resources remain
+later-phase architecture.
 
 ## Event and processing flow
 
@@ -182,5 +185,6 @@ bucket/account cleanup command.
 ## Service boundary
 
 The approved services are S3, Lambda, EventBridge Scheduler, Glue Data Catalog, Athena,
-CloudWatch, IAM, and later Terraform. Redshift, Kafka, Kinesis, Airflow, EMR, Spark,
+CloudWatch, and IAM, with Terraform defining resources incrementally. Redshift, Kafka,
+Kinesis, Airflow, EMR, Spark,
 QuickSight, dbt, SageMaker, and machine learning are explicitly out of scope.

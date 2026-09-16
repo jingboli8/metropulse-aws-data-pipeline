@@ -107,42 +107,49 @@ until Phase 4.
 **Stop point:** adapter, handler, and real-day fake-S3 acceptance pass locally; no AWS
 deployment or packaging begins.
 
-## Phase 4: Terraform infrastructure
+## Phase 4: Container packaging and Terraform infrastructure
+
+**Status:** Complete locally; the user-run Linux amd64 container verification passed.
 
 **Deliverables**
 
-- Terraform modules/configuration for private data and Athena-results buckets, versioning,
-  encryption, Block Public Access, TLS-only policies, lifecycle rules, Lambda packaging,
-  least-privilege IAM, log retention, notifications, retry configuration, and alarms.
-- Environment variables/inputs with development schedules disabled by default. Common
-  tags include project, environment, owner, managed-by, and cost-center/purpose.
-- A reviewed packaging decision between a zip with a compatible PyArrow layer and a
-  container image, followed by reproducible build and runtime verification.
-- `terraform fmt`, validation, plan workflow, remote-state decision, and documented
-  deploy/destroy commands. State and plan files remain ignored and contain no secrets.
+- Separate Terraform roots for an immutable, encrypted, scan-on-push ECR repository and
+  for private data/Athena-results buckets, versioning, encryption, Block Public Access,
+  TLS-only policies, lifecycle rules, least-privilege IAM, finite log retention, the
+  digest-pinned Lambda, bounded retries, and the raw notification.
+- Official digest-pinned Lambda Python 3.12 Linux amd64 container with a hash-pinned
+  PyArrow wheel, narrow Docker context, handler command, and a PowerShell verification
+  script for imports, deterministic processing, content, history, and image size.
+- Environment inputs with no schedules. Common tags include project, environment,
+  owner, managed-by, and purpose.
+- Local state decision, signed provider locks for Windows/Linux amd64, mock-provider
+  tests, and documented bootstrap, release, recovery, and destroy commands. State,
+  plans, variable files, and image exports remain ignored.
 
 **Acceptance criteria**
 
-- A reviewed plan contains only the approved services and restricts notification to the
-  raw prefix plus CSV suffix. IAM policy checks show prefix-level access by role.
+- Static and mock-provider tests contain only the approved Phase 4 services and restrict
+  notification to the raw prefix plus CSV suffix. IAM policy checks show prefix-level
+  access by role. An AWS plan remains explicitly unexecuted.
 - Buckets reject public access and non-TLS access, use encryption at rest, and isolate
   Athena results. Lifecycle policies cover staging, temporary multipart uploads, and
   query results without expiring retained raw/curated data prematurely.
-- `terraform destroy` removes project-created resources after emptying only the named
-  development buckets through a documented, deliberate teardown step.
+- The local container verifier passes before commit. Terraform destroy documentation
+  requires backup review and platform-first teardown; force deletion defaults to false.
 
 **Tests**
 
-- Terraform format/validate plus static security checks; policy and notification tests.
-- In an explicitly approved development account: apply-plan review, deploy smoke
-  test with synthetic data, and destroy-plan review. Never read local AWS credential files.
+- Terraform format/init/validate and native mock-provider tests plus repository security
+  invariants. No test contacts AWS.
+- User-run local Docker build/import/processor/content/history verification. Development
+  account plan/deploy evidence is deferred until separately authorized.
 
-**AWS resources affected:** S3, Lambda, IAM, CloudWatch log groups/alarms, and S3
-notification resources. Glue, Athena, compaction, audit, and schedules may be added in
-their owning phases.
+**AWS resources affected:** ECR, S3, Lambda, IAM, CloudWatch Logs, and S3 notification
+resources. Glue, Athena, compaction, audit, and schedules may be added in their owning
+phases.
 
-**Stop point:** infrastructure plan and, only with explicit authorization, development
-smoke evidence pass; leave schedules disabled and do not start compaction.
+**Stop point:** local Terraform and externally executed container verification pass; do
+not plan/apply, push, deploy, or start compaction.
 
 ## Phase 5: Monthly compaction and Glue/Athena
 

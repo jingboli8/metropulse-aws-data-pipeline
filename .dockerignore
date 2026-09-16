@@ -1,0 +1,10 @@
+**
+!Dockerfile
+!requirements-lambda.txt
+!metropulse/
+!metropulse/**
+!scripts/
+!scripts/clean_lambda_task.py
+metropulse/**/__pycache__/
+metropulse/**/*.pyc
+metropulse/**/*.pyo
