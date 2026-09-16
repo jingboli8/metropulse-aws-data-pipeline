@@ -6,6 +6,7 @@ data/processed/
 *.zip
 *.csv
 *.parquet
+*.jsonl
 
 # Python
 /build/
@@ -20,8 +21,22 @@ __pycache__/
 .terraform/
 *.tfstate
 *.tfstate.*
+*.tfplan
+*.plan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+*.tfvars
+*.tfvars.json
 .env
 .env.*
+
+# Local container exports
+*.oci
+*.tar
 
 # Generated feasibility output (reproducible, but may contain bulky profiling detail)
 artifacts/

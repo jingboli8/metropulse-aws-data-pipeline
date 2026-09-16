@@ -7,9 +7,9 @@ signals on one metro train Air Production Unit (APU). It is operational train te
 not manufacturing production-line data and not a table of confirmed failures.
 
 The repository contains the Phase -1 feasibility study, Phase 0 architecture contracts,
-the Phase 1 AWS-independent validation core, the Phase 2 local daily backfill, and the
-Phase 3 offline-tested S3/Lambda adapter. It does not deploy or operate the AWS pipeline
-described below.
+the Phase 1 AWS-independent validation core, the Phase 2 local daily backfill, the Phase
+3 offline-tested S3/Lambda adapter, and Phase 4 container and Terraform definitions. It
+does not deploy or operate the AWS pipeline described below.
 
 ## Proposed pipeline
 
@@ -181,8 +181,36 @@ quarantine rows. A completion marker was published, the second invocation return
 ```
 
 See the [Lambda processing contract](docs/lambda-processing-contract.md) and
-[observability contract](docs/observability.md). Lambda packaging and AWS infrastructure
-remain Phase 4 decisions; this repository does not yet claim a deployable handler.
+[observability contract](docs/observability.md).
+
+## Phase 4 packaging and infrastructure
+
+Phase 4 defines an AWS Lambda Python 3.12 Linux amd64 container with a digest-pinned
+official AWS base and hash-pinned PyArrow 21.0.0 wheel. It also defines separate
+Terraform roots for the ECR bootstrap and the platform. The platform includes two
+private encrypted S3 buckets, data-lake versioning and lifecycle rules, a least-privilege
+Lambda role, a finite-retention log group, a digest-pinned container Lambda, and an S3
+notification limited to `raw/source=metropt3/` keys ending in `data.csv`.
+
+Terraform format, initialization, validation, and native mocked-provider tests pass
+locally without AWS calls. The user also completed the external Linux amd64 container
+verification with `docker buildx build --load`. It confirmed PyArrow 21.0.0, handler
+import and configuration, one deterministic valid row with no quarantine, Snappy
+Parquet, 740 inspected task entries, Lambda's default-user configuration, and a clean
+Docker-history secret scan. The resulting local image was 233,356,828 bytes
+(approximately 222.5 MiB). From the repository root, reproduce that verification with:
+
+```powershell
+.\scripts\verify_lambda_container.ps1
+```
+
+The script builds only `linux/amd64`, verifies PyArrow and handler imports, runs a
+deterministic in-memory processing smoke test, audits `/var/task` and image history, and
+makes no AWS call or push. See the [deployment runbook](docs/deployment.md),
+[security controls](docs/security.md), [cost controls](docs/cost-control.md), and
+[packaging ADR](docs/adr/006-lambda-packaging.md). Packaging and infrastructure are
+implemented and locally validated; nothing has been deployed and AWS evidence does not
+yet exist.
 
 ## Design documents
 
@@ -193,11 +221,15 @@ remain Phase 4 decisions; this repository does not yet claim a deployable handle
 - [Local backfill operations](docs/local-backfill-operations.md)
 - [Lambda processing contract](docs/lambda-processing-contract.md)
 - [Structured observability](docs/observability.md)
+- [Deployment and recovery](docs/deployment.md)
+- [Security controls](docs/security.md)
+- [Cost controls](docs/cost-control.md)
 - Architecture decisions: [source ingestion](docs/adr/001-source-ingestion.md),
   [timestamp semantics](docs/adr/002-timestamp-semantics.md),
   [idempotency](docs/adr/003-idempotency.md),
   [small-file compaction](docs/adr/004-small-file-compaction.md), and
-  [schema normalization](docs/adr/005-schema-normalization.md)
+  [schema normalization](docs/adr/005-schema-normalization.md), and
+  [Lambda packaging](docs/adr/006-lambda-packaging.md)
 - Phase -1 evidence: [data source](docs/data-source.md) and
   [feasibility report](docs/feasibility-report.md)
 
