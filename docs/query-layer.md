@@ -91,3 +91,11 @@ Terraform format, validation, mock tests, and SQL contract tests are offline. Ac
 and Athena creation, partition visibility, result encryption, bytes scanned, cutoff
 behavior, and query results require a later explicitly authorized AWS deployment. No
 real Athena query evidence exists in Phase 5.
+
+## Phase 6 publication implementation
+
+Phase 6 implements the offline publication contract. The publisher requires values
+exactly `[year, month]`, a trailing-slash location naming one completed `run_id`, and an
+expected current location for replacement. Glue offers no conditional location update
+or fencing token, so the S3 publication claim is operational serialization rather than
+an atomic S3/Glue transaction. No real partition has been created.

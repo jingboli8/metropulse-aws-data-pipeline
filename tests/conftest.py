@@ -3,7 +3,7 @@ from __future__ import annotations
 import csv
 import io
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from urllib.parse import quote_plus
 
 import pytest
@@ -11,6 +11,9 @@ import pytest
 from metropulse.aws.config import LambdaConfig
 from metropulse.aws.observability import StructuredObserver
 from metropulse.aws.testing import InMemoryObjectStorage
+from metropulse.compaction_models import MonthlySelection, SelectedDailyInput
+from metropulse.models import NormalizedRecord
+from metropulse.parquet import serialize_daily_parquet
 from metropulse.schema import SOURCE_FIELDS
 
 
@@ -108,3 +111,81 @@ def event_record_factory() -> Callable[..., dict[str, object]]:
 @pytest.fixture
 def fixed_clock() -> Callable[[], datetime]:
     return lambda: datetime(2026, 9, 11, 8, 0, tzinfo=UTC)
+
+
+@pytest.fixture
+def compact_fixture():
+    """Build small selected inputs and valid daily Parquet payloads."""
+    import hashlib
+
+    def make(days: tuple[int, ...] = (1, 2), *, gap: bool = False):
+        inputs = []
+        payloads = {}
+        for offset, day in enumerate(days):
+            source_date = date(2020, 2, day)
+            second = 0 if not gap or offset == 0 else 40
+            timestamp = datetime(2020, 2, day, 0, 0, second)
+            record = NormalizedRecord(
+                record_index=offset + 1,
+                event_timestamp_local=timestamp,
+                tp2=-0.1,
+                tp3=9.0,
+                h1=8.0,
+                dv_pressure=-0.2,
+                reservoirs=9.1,
+                oil_temperature=50.0,
+                motor_current=1.0,
+                comp=True,
+                dv_electric=False,
+                towers=True,
+                mpg=False,
+                lps=True,
+                pressure_switch=False,
+                oil_level=True,
+                caudal_impulses=False,
+                source_date=source_date,
+                event_timestamp_timezone_status="unknown",
+            )
+            body = serialize_daily_parquet(
+                [record],
+                pipeline_version="2.0.0",
+                source_identity={"fixture": True},
+                source_date=source_date,
+                raw_sha256="a" * 64,
+                processing_timestamp="2026-09-10T00:00:00Z",
+            )
+            key = f"staging/day={day:02d}/data.parquet"
+            item = SelectedDailyInput(
+                source_date=source_date,
+                processing_identity=f"input-{day}",
+                completion_marker_bucket="bucket",
+                completion_marker_key=f"control/day={day:02d}/completed.json",
+                completion_marker_identity_kind="sha256",
+                completion_marker_identity_value="b" * 64,
+                staging_bucket="bucket",
+                staging_key=key,
+                staging_sha256=hashlib.sha256(body).hexdigest(),
+                staging_byte_size=len(body),
+                input_row_count=1,
+                valid_row_count=1,
+                quarantine_row_count=0,
+                first_valid_timestamp=timestamp,
+                last_valid_timestamp=timestamp,
+                pipeline_version="2.0.0",
+                schema_version="1.0.0",
+                manifest_version="1.1.0",
+            )
+            inputs.append(item)
+            payloads[key] = body
+        selection = MonthlySelection(
+            source_name="metropt3",
+            year=2020,
+            month=2,
+            inputs=tuple(inputs),
+            expected_raw_dates=tuple(date(2020, 2, day) for day in range(1, 30)),
+            known_source_start=date(2020, 2, 1),
+            known_source_end=date(2020, 9, 1),
+        )
+        return selection, payloads
+
+    return make

@@ -114,3 +114,12 @@ and deliberately emptying the named project buckets. Remove ECR images deliberat
 destroy `infra/bootstrap` last, and leave its `allow_force_delete` false unless the exact
 repository contents have been reviewed. Never use broad account-wide empty/delete
 commands.
+
+## Monthly publication recovery
+
+Monthly publication writes and verifies the run-specific Parquet object, conditionally
+writes completion, acquires and rechecks the strict month claim, then creates/updates and
+reads back Glue. A stale month-publication claim is never automatically taken over. A
+failed replacement preserves the old approved partition. `published.json` is historical
+evidence rather than authority for the current catalog location. The local Phase 6
+acceptance does not create Glue state.

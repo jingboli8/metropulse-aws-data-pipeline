@@ -7,9 +7,10 @@ signals on one metro train Air Production Unit (APU). It is operational train te
 not manufacturing production-line data and not a table of confirmed failures.
 
 The repository contains the Phase -1 feasibility study, Phase 0 architecture contracts,
-the Phase 1 AWS-independent validation core, the Phase 2 local daily backfill, the Phase
-3 offline-tested S3/Lambda adapter, and Phase 4 container and Terraform definitions. It
-does not deploy or operate the AWS pipeline described below.
+the Phase 1 AWS-independent validation core, Phase 2 local daily backfill, Phase 3
+offline-tested S3/Lambda adapter, Phase 4 container and Terraform definitions, Phase 5
+query contracts, and Phase 6 deterministic monthly compaction contracts. It does not
+deploy or operate the AWS pipeline described below.
 
 ## Proposed pipeline
 
@@ -53,8 +54,9 @@ The implementation deliberately uses Amazon S3, AWS Lambda, EventBridge Schedule
 AWS Glue Data Catalog, Athena, CloudWatch, IAM, and Terraform. The monolithic source CSV
 is split locally so each Lambda invocation handles one small, independently retryable
 day. Valid rows become daily Snappy Parquet staging objects; invalid rows retain their
-original data and rejection metadata in quarantine. Monthly compaction reduces about
-212 daily units to roughly seven curated units partitioned by year and month.
+original data and rejection metadata in quarantine. Monthly compaction reduces 212 daily
+units to 8 curated monthly units (2020-02 through 2020-09) partitioned by year and month.
+September is a valid partial terminal month containing only 2020-09-01.
 
 Redshift, Kafka, Kinesis, Airflow, EMR, Spark, QuickSight, dbt, SageMaker, and machine
 learning are outside this project's scope.
@@ -231,6 +233,30 @@ See the [query-layer contract](docs/query-layer.md) and
 have only offline evidence: no Glue/Athena resources, curated partitions, result files,
 bytes-scanned measurements, or real queries exist yet.
 
+## Phase 6 monthly compaction
+
+Phase 6 adds an AWS-independent compaction core, a local adapter/CLI, exact-marker S3
+orchestration, and an injected Glue publisher. It selects one approved immutable daily
+attempt per date, creates a deterministic run ID, writes one explicit-schema Snappy file
+with 65,536-row groups, verifies it by reopening, and writes completion before Glue can
+expose the run. Existing run objects are never silently replaced.
+
+The verified source contract spans 8 calendar months, 2020-02 through 2020-09, with 212
+daily inputs and 1,516,948 rows. February lacks 2020-02-29, April lacks 2020-04-26, and
+September is a valid partial terminal month containing only 2020-09-01. These are
+coverage findings; compaction neither imputes observations nor creates quarantine rows.
+
+See [monthly compaction operations](docs/monthly-compaction.md) and
+[ADR 008](docs/adr/008-monthly-compaction-publication.md). The implementation and
+full-data results are local evidence only. Glue and Athena remain undeployed and contain
+no real partitions or query evidence.
+
+The local acceptance produced 8 Snappy files and 8 completion manifests from all 212
+daily inputs. Selected and curated counts both equal 1,516,948; the derived quarantine
+count is zero. The monthly outputs contain 327 gaps greater than 60 seconds, and 4 more
+occur across month boundaries, reconciling to the full-history total of 331. An identical
+rerun resumed all eight immutable runs with unchanged IDs, sizes, and SHA-256 values.
+
 ## Design documents
 
 - [Architecture](docs/architecture.md)
@@ -244,13 +270,15 @@ bytes-scanned measurements, or real queries exist yet.
 - [Security controls](docs/security.md)
 - [Cost controls](docs/cost-control.md)
 - [Glue and Athena query layer](docs/query-layer.md)
+- [Monthly compaction operations](docs/monthly-compaction.md)
 - Architecture decisions: [source ingestion](docs/adr/001-source-ingestion.md),
   [timestamp semantics](docs/adr/002-timestamp-semantics.md),
   [idempotency](docs/adr/003-idempotency.md),
-  [small-file compaction](docs/adr/004-small-file-compaction.md), and
-  [schema normalization](docs/adr/005-schema-normalization.md), and
-  [Lambda packaging](docs/adr/006-lambda-packaging.md), and
-  [curated partition publication](docs/adr/007-curated-partition-publication.md)
+  [small-file compaction](docs/adr/004-small-file-compaction.md),
+  [schema normalization](docs/adr/005-schema-normalization.md),
+  [Lambda packaging](docs/adr/006-lambda-packaging.md),
+  [curated partition publication](docs/adr/007-curated-partition-publication.md), and
+  [monthly compaction publication](docs/adr/008-monthly-compaction-publication.md)
 - Phase -1 evidence: [data source](docs/data-source.md) and
   [feasibility report](docs/feasibility-report.md)
 
