@@ -152,3 +152,12 @@ rejection metadata can coexist. One JSON object represents one rejected source r
 
 At least one of version ID, checksum, or ETag must identify the source object. Quarantine
 records may contain telemetry and lineage but never AWS credentials or secret values.
+
+## Monthly curated contract
+
+Phase 6 pins every selected completion marker by version ID, SHA-256, or ETag and pins
+its staging key, SHA-256, size, counts, boundary timestamps, and contract versions.
+Curated rows retain the exact 19-column normalized schema. The Parquet timestamp is
+`timestamp[ms]` without a timezone and `event_timestamp_timezone_status` remains
+`unknown`. Glue metadata cannot enforce Parquet nullability; required values continue to
+be enforced upstream.

@@ -28,8 +28,9 @@ source rows = curated rows + associated quarantine rows
 
 ## Consequences
 
-- Approximately 212 daily units become roughly seven monthly query units, materially
-  reducing object count while keeping validation/replay granular.
+- Exactly 212 daily units become 8 monthly query units for 2020-02 through 2020-09,
+  materially reducing object count while keeping validation/replay granular. September
+  is a valid partial terminal month containing only 2020-09-01.
 - Some monthly files may still be below generic 128 MB guidance. That is acceptable and
   proportionate for this dataset; chasing a target file size would add unnecessary
   infrastructure and reduce clarity.

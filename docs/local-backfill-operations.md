@@ -123,3 +123,11 @@ It does not change row validity or quarantine output and never imputes an interv
 The verified result is 1,516,736 within-partition deltas plus 211 boundary deltas,
 equaling 1,516,947 global deltas. Within-partition gaps are 268, boundary gaps are 63,
 and the global total is 331. The detailed report remains ignored under `artifacts/`.
+
+## Monthly acceptance
+
+The Phase 6 local adapter reads these verified manifests and translates their exact
+staging references into the common explicit-selection model. It does not redefine AWS
+approval. Run `python -m metropulse.compaction_cli` as documented in
+[monthly compaction operations](monthly-compaction.md). Generated curated objects and
+acceptance evidence stay under ignored `data/local-lake/` and `artifacts/` paths.

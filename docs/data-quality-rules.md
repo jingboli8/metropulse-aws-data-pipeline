@@ -132,3 +132,13 @@ gap/order/interval/low-volume metrics, reconciliation status, duration, and fail
 counts. Terminal row totals are emitted only after the invocation wins conditional
 completion, which limits double-counting on duplicate S3 delivery; attempt and error
 metrics intentionally describe every invocation.
+
+## Monthly compaction classification
+
+Compaction fails on missing or mismatched selected evidence, schema/codec/timezone
+differences, daily or monthly reconciliation failure, cross-day duplicate timestamps or
+record indexes, output verification failure, and immutable-key conflicts. Missing
+expected source dates, terminal partial-month coverage, gaps over 60 seconds, reversed
+or nonduplicate overlapping boundaries, and empty unassessable boundaries are recorded
+as warnings/findings without fabricating rows. Negative finite readings, compression
+ratio, row groups, and byte sizes remain observations.

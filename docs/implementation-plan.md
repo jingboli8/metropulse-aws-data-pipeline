@@ -189,6 +189,8 @@ partitions, deploy, or claim real Athena query evidence.
 
 ## Phase 6: Monthly compaction and curated partition publication
 
+**Status:** Implemented and locally validated; no AWS deployment or partition exists.
+
 **Deliverables**
 
 - Monthly compaction core and thin adapter using exact completed daily manifest sets,
@@ -200,12 +202,14 @@ partitions, deploy, or claim real Athena query evidence.
 
 **Acceptance criteria**
 
-- Approximately 212 daily validation units compact to roughly seven monthly units; no
+- Exactly 212 daily validation units compact to 8 monthly units for 2020-02 through
+  2020-09; September is a valid partial terminal month containing only 2020-09-01, and no
   append-in-place write occurs.
 - Curated rows equal the valid rows from the exact selected daily completions, and source
   rows equal curated plus associated quarantine rows.
 - Repeated identical inputs produce the same run identity. A changed input set publishes
-  a new immutable run before atomically changing the catalog partition location.
+  a new immutable run before changing the catalog partition location. S3 completion and
+  Glue publication are ordered but cannot form a cross-service atomic transaction.
 
 **Tests**
 

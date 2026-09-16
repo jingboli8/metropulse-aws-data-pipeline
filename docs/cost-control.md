@@ -23,3 +23,9 @@ usage rather than an exact price claim.
 Retention and runtime settings are variables so a reviewed environment can adjust them.
 The dev-only force-delete variables default to false and are teardown controls, not
 routine cost-management switches.
+
+Monthly compaction reduces 212 daily staging files to 8 curated files. These files remain
+below generic large-lake sizing guidance, but this proportionate reduction cuts request
+and metadata overhead without adding distributed compute. Superseded immutable runs need
+a reviewed lifecycle only after the currently published Glue location and retention
+requirements are known; Phase 6 does not delete them.

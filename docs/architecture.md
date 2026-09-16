@@ -192,3 +192,13 @@ The approved services are S3, Lambda, EventBridge Scheduler, Glue Data Catalog, 
 CloudWatch, and IAM, with Terraform defining resources incrementally. Redshift, Kafka,
 Kinesis, Airflow, EMR, Spark,
 QuickSight, dbt, SageMaker, and machine learning are explicitly out of scope.
+
+## Phase 6 publication boundary
+
+An explicit monthly selection pins exactly one daily completion marker and staging
+checksum per date. The compactor never lists immutable attempts to choose an input. It
+creates an immutable run-specific file and verified completion marker before the
+year/month Glue partition can move. S3 and Glue are not one transaction; a strict
+month-publication claim serializes normal operation, while stale claims require operator
+reconciliation. Phase 7 owns scheduled invocation, bounded publisher concurrency,
+metrics, alarms, and cross-month continuity auditing.

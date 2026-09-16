@@ -84,3 +84,11 @@ default-user, and Docker-history secret checks.
 - Scan tracked files for credentials, account IDs, personal buckets, machine paths,
   generated data, Terraform state, plans, and image archives.
 - Never inspect local AWS credential files as part of this workflow.
+
+## Future compactor permissions
+
+Phase 6 introduces no IAM or Terraform changes. A future compactor role needs exact-key
+reads for selected validation markers and staging objects, conditional writes only under
+the curated and compaction-control prefixes, and `glue:GetTable`, `glue:GetPartition`,
+`glue:CreatePartition`, and `glue:UpdatePartition` for the one database/table. It needs no
+Athena call, partition deletion, broad bucket listing, or wildcard S3 permission.
