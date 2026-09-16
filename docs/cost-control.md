@@ -9,8 +9,9 @@ usage rather than an exact price claim.
 - Staging expires after 90 days by default; quarantine after 365 days; control records
   after 730 days. Noncurrent versions have bounded retention. Raw and curated current
   objects remain durable, while their noncurrent versions expire after 365 days.
-- Athena results expire after 30 days in a separate bucket. Athena workgroup scan limits
-  will be added in Phase 5 with the query layer.
+- Athena results expire after 30 days in a separate bucket. The Phase 5 workgroup enforces
+  its result prefix and a configurable 268,435,456-byte (256 MiB) default per-query scan
+  cutoff. Routine SQL filters `year` and `month` and selects explicit columns.
 - CloudWatch validation logs retain 14 days by default.
 - Lambda uses a small reserved-concurrency default of two, a bounded five-minute timeout,
   and no provisioned concurrency.

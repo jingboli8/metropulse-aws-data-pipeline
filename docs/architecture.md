@@ -73,8 +73,9 @@ Phase 3 implements and tests the validator's event, storage, idempotency, and
 observability adapters using in-memory S3. Phase 4 adds the externally verified Linux
 amd64 Lambda container definition and locally validated Terraform for ECR, private S3
 storage, IAM, the log group, Lambda, and the raw-object notification. Nothing has been
-deployed. The scheduled audit, compactor, catalog, and query resources remain
-later-phase architecture.
+deployed. Phase 5 adds offline Terraform contracts for the Glue database, curated table,
+and Athena workgroup, but creates no partitions or AWS resources. The scheduled audit,
+compactor, and approved curated partition publication remain later-phase architecture.
 
 ## Event and processing flow
 
@@ -94,8 +95,11 @@ later-phase architecture.
 5. EventBridge Scheduler invokes compaction monthly. The compactor reads completed daily
    manifests for the target month, creates monthly Snappy Parquet, checks reconciliation,
    then publishes the curated manifest and partition. It never appends to a Parquet file.
-6. Glue exposes only `curated/`. Athena queries year/month partitions through a workgroup
-   with scan limits and a separate encrypted query-results bucket.
+6. Glue exposes only `curated/`. Each year/month partition points explicitly to one
+   approved immutable `run_id`; partition projection and automatic repair are disabled.
+   Athena queries those partitions through a workgroup with scan limits and a separate
+   encrypted query-results bucket. Until Phase 6 publishes partitions, the Phase 5 table
+   is empty.
 7. A scheduled audit checks expected daily/monthly manifests, reconciliation, and
    cross-object continuity by comparing ordered daily manifest endpoints. This audit,
    rather than an individual validation invocation, owns partition-boundary gap,

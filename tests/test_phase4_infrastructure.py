@@ -200,7 +200,10 @@ def test_runtime_inventory_rejects_unexpected_top_level_entry(
 
 
 def test_terraform_defines_only_phase4_service_resources() -> None:
-    terraform = "\n".join(path.read_text(encoding="utf-8") for path in INFRA.rglob("*.tf"))
+    phase4_roots = (INFRA / "bootstrap", INFRA / "platform")
+    terraform = "\n".join(
+        path.read_text(encoding="utf-8") for root in phase4_roots for path in root.rglob("*.tf")
+    )
     resource_types = set(re.findall(r'^resource\s+"([^"]+)"', terraform, re.MULTILINE))
     assert resource_types == {
         "aws_cloudwatch_log_group",
