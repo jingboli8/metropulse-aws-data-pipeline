@@ -89,13 +89,14 @@ or next object. Each daily completion manifest therefore records the first and l
 `event_timestamp_local` values and the valid timestamp count. A separate global audit
 sorts manifests by `source_date`, combines their within-object sampling distributions,
 and measures the boundary from one partition's last valid timestamp to the next
-partition's first valid timestamp. The future scheduled EventBridge audit job owns this
-cross-object check in AWS.
+partition's first valid timestamp. The Phase 7 scheduled-audit core and Lambda adapter
+own this cross-object check; Terraform represents its disabled-by-default Scheduler
+invocation, but no AWS execution has occurred.
 
 The Phase 3 event adapter preserves this boundary: it emits each object's existing batch
 metrics but does not infer a boundary interval from unrelated notifications. Delivery
 order is not chronological evidence. The scheduled/global audit remains responsible for
-ordered cross-object continuity.
+ordered cross-object continuity and is fully exercised with fakes offline.
 
 | Rule ID | Class | Condition | Result |
 |---|---|---|---|

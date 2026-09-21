@@ -17,6 +17,7 @@ GLOBAL_AUDIT = Path("artifacts/phase2-global-audit.json")
     not ROOT.exists() or not GLOBAL_AUDIT.exists(),
     reason="ignored full local backfill/audit evidence is absent",
 )
+@pytest.mark.full_data
 def test_full_local_dataset_monthly_contract() -> None:
     expected = {
         "2020-02": 214850,

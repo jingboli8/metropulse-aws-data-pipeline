@@ -3,9 +3,9 @@ requires = ["setuptools>=69"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "metropulse-feasibility"
+name = "metropulse-aws-data-pipeline"
 version = "0.1.0"
-description = "Local feasibility and deterministic validation core for MetroPT-3"
+description = "Deterministic MetroPT-3 data-quality pipeline with AWS infrastructure contracts"
 requires-python = ">=3.11"
 dependencies = [
   "duckdb>=1.1,<2",
@@ -22,6 +22,7 @@ metropulse-operations = "metropulse.operations_cli:main"
 
 [project.optional-dependencies]
 dev = [
+  "PyYAML>=6.0,<7",
   "pytest>=8,<10",
   "ruff>=0.9,<1",
 ]
@@ -34,6 +35,9 @@ include = ["metropulse*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+  "full_data: requires the ignored complete MetroPT-3 local acceptance dataset",
+]
 
 [tool.ruff]
 line-length = 100
