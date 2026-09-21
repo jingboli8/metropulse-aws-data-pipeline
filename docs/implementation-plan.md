@@ -225,6 +225,9 @@ schedule, or add alarms.
 
 ## Phase 7: On-demand compaction operations and scheduled integrity audit
 
+**Status:** Complete locally; external Linux amd64 container verification passed and no
+AWS resource was deployed.
+
 **Deliverables**
 
 - Exact immutable selection approval and audit-inventory publication CLIs with no bucket
@@ -257,42 +260,56 @@ schedule, or add alarms.
 EventBridge Scheduler and its invocation role, CloudWatch alarms/dashboard/log groups,
 and the existing platform control-evidence lifecycle. Nothing is applied in Phase 7.
 
-**Stop point:** offline evidence and external container verification pass; do not deploy,
-enable the schedule, merge, or begin Phase 8.
+**Stop point:** offline evidence and external container verification passed; deployment
+and schedule enablement remain separately authorized work.
 
-## Phase 8: GitHub Actions, end-to-end evidence, README polish, and teardown
+## Phase 8: Account-free CI and portfolio readiness
+
+**Status:** Implemented locally. The workflow cannot become GitHub evidence until the
+repository is pushed and GitHub Actions completes successfully.
 
 **Deliverables**
 
-- GitHub Actions for Ruff, tests, packaging, Terraform formatting/validation/security
-  checks, with no raw data or long-lived AWS keys.
-- Bounded end-to-end run using synthetic data first and the verified dataset only under an
-  explicitly approved AWS run; captured manifests, CloudWatch/Athena evidence, cost notes,
-  and architecture screenshots that contain no credentials.
-- Final README walkthrough, trade-offs, limitations, attribution, teardown procedure,
-  and portfolio talking points.
+- GitHub Actions for Ruff, offline pytest, Markdown checks, Terraform
+  formatting/validation/mock tests, and PowerShell parsing with no AWS identity.
+- Strict `full_data` test separation so a clean clone needs no ignored dataset while the
+  explicit local acceptance path remains available.
+- Recruiter-oriented README, MIT code license, sanitized local evidence, and local
+  Parquet-derived SQL examples with clear evidence boundaries.
 
 **Acceptance criteria**
 
-- CI passes from a clean clone without dataset access for unit tests. Repository checks
-  prove raw CSV/ZIP, Parquet, artifacts, caches, `.venv`, and Terraform state are untracked.
-- End-to-end counts reconcile and alarms/audit are demonstrated. Athena result isolation
-  and scan limits are visible. The README accurately describes the metro-train APU data.
-- Teardown inventories named resources, disables schedules, empties only project-owned
-  disposable buckets after review, runs `terraform destroy`, and verifies no project
-  resources remain. Retention exceptions are explicitly documented.
+- Clean-clone commands exclude the marked full-data test, need no AWS account, and make
+  no live AWS calls. Fresh runners may download pinned tools and dependencies from their
+  official sources.
+- Repository checks prove datasets, generated Parquet/evidence, caches, virtual
+  environments, and Terraform state/plans remain untracked.
+- Public documentation distinguishes local implementation, external container
+  verification, mocked Terraform definitions, and the absence of real AWS evidence.
 
 **Tests**
 
-- Clean-clone CI; synthetic end-to-end test; approved real-data smoke/backfill; final
-  security, cost, Git tracking, and teardown verification.
+- Python 3.11 and 3.12 tests excluding `full_data`; Ruff and Markdown contracts;
+  Terraform 1.16.2 validation and mocked tests across all four roots; PowerShell parsing;
+  CI and repository-hygiene contract tests.
 
-**AWS resources affected:** all project resources for final evidence and teardown; no
-other account resources are in scope.
+**AWS resources affected:** none.
 
-**Stop point:** evidence is saved safely, the repository is clean of generated data and
-state, and the documented teardown is complete or an explicit retained-resource list is
-approved.
+**Stop point:** local CI contracts and portfolio evidence pass; do not create a remote,
+push, deploy, or begin optional Phase 9 without separate authorization.
+
+## Optional Phase 9: Real AWS deployment and teardown evidence
+
+This phase is intentionally separate. If authorized, it would review a plan, deploy only
+project-owned resources, push a digest-pinned image, publish exact selections and audit
+inventory, run bounded service acceptance, capture sanitized Glue/Athena/Scheduler/
+CloudWatch evidence, and execute the documented teardown. It would require real AWS
+credentials, account APIs, cost review, and explicit approval. None of that evidence
+exists today.
+
+**AWS resources affected:** potentially all project resources, only after authorization.
+
+**Stop point:** either verified teardown or an explicit retained-resource inventory.
 
 ## Cost controls across phases
 

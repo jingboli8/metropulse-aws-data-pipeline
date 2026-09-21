@@ -69,9 +69,10 @@ The largest verified month has 230,448 rows; selected daily compressed inputs to
 than 6.7 MB per month, and the largest curated file is less than 6.5 MB. The default
 adapter bounds are 31 inputs, 128 MiB compressed input, 500,000 input rows, and 128 MiB
 output. Compaction reads only explicitly selected keys and performs no bucket scan. The
-current in-memory Arrow strategy is proportionate to this dataset; Phase 7 must confirm
-deployed Lambda memory, `/tmp`, timeout, concurrency, logs, metrics, encryption/IAM, and
-container rebuild settings before scheduling it.
+current in-memory Arrow strategy is proportionate to this dataset. Phase 7 defines and
+mock-tests 2,048 MiB memory, 1,024 MiB ephemeral storage, a 300-second timeout, reserved
+concurrency of one, separate IAM/logging, and on-demand invocation. These settings have
+not been deployed to AWS.
 
 ## Local command
 
@@ -98,6 +99,6 @@ visible. An ambiguous response is resolved only through read-back. A stale publi
 claim requires operator reconciliation and is never taken over automatically.
 
 S3 object creation is atomic, but S3 and Glue are not one transaction. Phase 7 supplies
-an on-demand Lambda, unique invocation owner tokens, bounded concurrency, metrics,
-alarms, and the scheduled cross-month audit. Static historical compaction is not
-scheduled.
+the on-demand Lambda contract, unique invocation owner tokens, bounded concurrency,
+metrics, alarms, and scheduled cross-month audit definitions. Static historical
+compaction is not scheduled, and no AWS resource has been deployed.

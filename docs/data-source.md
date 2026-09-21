@@ -20,9 +20,8 @@ The UCI page explicitly marks the dataset as CC BY 4.0 and says sharing and adap
 are permitted for any purpose with appropriate credit. It also answers **“no”** to the
 question of whether the dataset contains data that might be considered sensitive.
 
-The dataset license applies to the dataset. It does not automatically determine the
-license of MetroPulse's future source code. A code license must be selected separately
-during a later project phase.
+The dataset license applies to the dataset and remains separate from the repository's
+[MIT code license](../LICENSE).
 
 ## What the records represent
 

@@ -1,0 +1,43 @@
+{
+  "aws_verification": {
+    "api_calls_performed": false,
+    "deployed": false,
+    "statement": "No real AWS deployment or AWS API verification has occurred."
+  },
+  "container_verification": {
+    "execution": "external_user_run",
+    "handlers_imported": [
+      "validation",
+      "compaction",
+      "audit"
+    ],
+    "image_size_bytes": 233386762,
+    "platform": "linux/amd64",
+    "pyarrow_version": "21.0.0",
+    "result": "passed"
+  },
+  "contract": "metropulse-public-portfolio-evidence-v1",
+  "daily_inputs": 212,
+  "deterministic_rerun": {
+    "logical_manifests_stable": true,
+    "monthly_parquet_hashes_stable_in_pinned_local_runtime": true,
+    "run_ids_stable": true
+  },
+  "monthly_outputs": 8,
+  "quality": {
+    "cross_month_gaps_over_60_seconds": 4,
+    "quarantine_rows": 0,
+    "total_gaps_over_60_seconds": 331,
+    "within_month_gaps_over_60_seconds": 327
+  },
+  "scope": "local_only",
+  "source_rows": 1516948,
+  "storage_verification": {
+    "all_column_chunks_snappy": true,
+    "exact_normalized_schema": true,
+    "normalized_column_count": 19,
+    "timestamp_timezone": null,
+    "timestamp_timezone_status": "unknown",
+    "timestamp_type": "timestamp[ms]"
+  }
+}
