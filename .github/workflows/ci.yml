@@ -79,7 +79,6 @@ jobs:
     env:
       TF_IN_AUTOMATION: "1"
       AWS_EC2_METADATA_DISABLED: "true"
-      TF_PLUGIN_CACHE_DIR: ${{ runner.temp }}/terraform-plugin-cache
     steps:
       # actions/checkout v7.0.1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -90,16 +89,21 @@ jobs:
         with:
           terraform_version: 1.16.2
           terraform_wrapper: false
+      - name: Prepare Terraform plugin cache
+        env:
+          TF_PLUGIN_CACHE_DIR: ${{ runner.temp }}/terraform-plugin-cache
+        run: mkdir -p "$TF_PLUGIN_CACHE_DIR"
       # actions/cache v5.0.0
-      - uses: actions/cache@a7833574556fa59680c1b7cb190c1735db73ebf0
+      - name: Cache Terraform providers
+        uses: actions/cache@a7833574556fa59680c1b7cb190c1735db73ebf0
         with:
           path: ${{ runner.temp }}/terraform-plugin-cache
           key: terraform-${{ runner.os }}-${{ hashFiles('infra/**/.terraform.lock.hcl') }}
-      - name: Create provider cache directory
-        run: mkdir -p "$TF_PLUGIN_CACHE_DIR"
       - name: Terraform formatting
         run: terraform fmt -check -recursive infra
-      - name: Validate mocked Terraform roots
+      - name: Validate Terraform contracts
+        env:
+          TF_PLUGIN_CACHE_DIR: ${{ runner.temp }}/terraform-plugin-cache
         shell: bash
         run: |
           set -euo pipefail

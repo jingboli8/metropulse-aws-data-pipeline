@@ -71,6 +71,16 @@ def test_terraform_contracts_cover_all_roots_without_live_operations() -> None:
     assert " validate" in WORKFLOW
     assert " test" in WORKFLOW
 
+    workflow = yaml.safe_load(WORKFLOW)
+    job = workflow["jobs"]["terraform-contracts"]
+    assert "TF_PLUGIN_CACHE_DIR" not in job["env"]
+    steps = {step.get("name"): step for step in job["steps"]}
+    cache_directory = "${{ runner.temp }}/terraform-plugin-cache"
+    assert steps["Prepare Terraform plugin cache"]["env"]["TF_PLUGIN_CACHE_DIR"] == cache_directory
+    assert steps["Prepare Terraform plugin cache"]["run"] == 'mkdir -p "$TF_PLUGIN_CACHE_DIR"'
+    assert steps["Cache Terraform providers"]["with"]["path"] == cache_directory
+    assert steps["Validate Terraform contracts"]["env"]["TF_PLUGIN_CACHE_DIR"] == cache_directory
+
     prohibited = (
         "terraform plan",
         "terraform apply",
