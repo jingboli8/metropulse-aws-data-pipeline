@@ -13,7 +13,7 @@ from scripts.clean_lambda_task import clean_task_root
 
 ROOT = Path(__file__).resolve().parents[1]
 INFRA = ROOT / "infra"
-ANSI_ESCAPE = re.compile(r"\x1b(?:[@-_]|\[[0-?]*[ -/]*[@-~])")
+ANSI_ESCAPE = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|[@-_])")
 
 
 def _read(path: str) -> str:
@@ -293,6 +293,12 @@ def test_container_verifier_gates_inspection_on_loaded_image() -> None:
 
     assert build < build_exit < build_guard < image_lookup < missing_guard
     assert missing_guard < first_inspect < first_run
+
+
+def test_ansi_escape_normalization_consumes_complete_csi_sequences() -> None:
+    formatted = "\x1b[31;1mException:\x1b[0m message \x1b[36;1mvalue\x1b[0m"
+
+    assert ANSI_ESCAPE.sub("", formatted) == "Exception: message value"
 
 
 def test_container_verifier_stops_when_loaded_image_is_unavailable(tmp_path: Path) -> None:
