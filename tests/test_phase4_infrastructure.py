@@ -302,21 +302,42 @@ def test_container_verifier_stops_when_loaded_image_is_unavailable(tmp_path: Pat
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
     call_log = tmp_path / "docker-calls.txt"
-    (fake_bin / "docker.cmd").write_text(
-        "@echo off\r\n"
-        'echo %*>>"%FAKE_DOCKER_LOG%"\r\n'
-        'if "%1"=="info" goto info\r\n'
-        'if "%1"=="buildx" exit /b 0\r\n'
-        'if "%1"=="image" if "%2"=="ls" exit /b 0\r\n'
-        "exit /b 88\r\n"
-        ":info\r\n"
-        "echo linux/amd64\r\n"
-        "exit /b 0\r\n",
-        encoding="utf-8",
-    )
+    if os.name == "nt":
+        fake_docker = fake_bin / "docker.cmd"
+        fake_docker.write_text(
+            "@echo off\r\n"
+            'echo %*>>"%FAKE_DOCKER_LOG%"\r\n'
+            'if "%1"=="info" goto info\r\n'
+            'if "%1"=="buildx" exit /b 0\r\n'
+            'if "%1"=="image" if "%2"=="ls" exit /b 0\r\n'
+            "exit /b 88\r\n"
+            ":info\r\n"
+            "echo linux/amd64\r\n"
+            "exit /b 0\r\n",
+            encoding="utf-8",
+        )
+    else:
+        fake_docker = fake_bin / "docker"
+        fake_docker.write_text(
+            "#!/bin/sh\n"
+            'printf \'%s\\n\' "$*" >> "$FAKE_DOCKER_LOG"\n'
+            'if [ "$1" = "info" ]; then\n'
+            "  printf '%s\\n' 'linux/amd64'\n"
+            "  exit 0\n"
+            "fi\n"
+            'if [ "$1" = "buildx" ]; then exit 0; fi\n'
+            'if [ "$1" = "image" ] && [ "$2" = "ls" ]; then exit 0; fi\n'
+            "exit 88\n",
+            encoding="utf-8",
+        )
+        fake_docker.chmod(0o755)
+
     environment = os.environ.copy()
     environment["PATH"] = f"{fake_bin}{os.pathsep}{environment['PATH']}"
     environment["FAKE_DOCKER_LOG"] = str(call_log)
+    resolved_docker = shutil.which("docker", path=environment["PATH"])
+    assert resolved_docker is not None
+    assert Path(resolved_docker).resolve() == fake_docker.resolve()
 
     completed = subprocess.run(
         [powershell, "-NoProfile", "-File", str(ROOT / "scripts/verify_lambda_container.ps1")],
