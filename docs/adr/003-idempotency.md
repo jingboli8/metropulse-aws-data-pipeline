@@ -47,11 +47,19 @@ only claim expiry. Completion verification recalculates referenced object SHA-25
 and checks their sizes and checksum metadata. An active claim fails retryably, while a
 stale claim is replaced only through `If-Match` on its current ETag.
 
-The stale threshold prevents a previous live Lambda from writing after takeover. A retry
-after partial failure rewrites only its deterministic outputs and repeats verification;
-absence of `completed.json` means they are not published. Compaction uses the same claim,
-deterministic output, verification, and completion pattern. Glue partition registration
-occurs only after the monthly completion marker.
+The stale threshold prevents a previous live validation Lambda from writing after
+takeover. A retry after partial validation failure rewrites only its deterministic
+outputs and repeats verification; absence of `completed.json` means they are not
+published.
+
+Monthly compaction uses immutable run output plus construction and month-publication
+claims with a unique invocation `owner_token`. A matching publication receipt is checked
+before a retry attempts a new claim, so fully completed work can return a verified no-op.
+Two live invocations for one run cannot both own a claim. An interrupted construction
+claim and any stale month-publication claim require explicit reconciliation; the latter
+can be replaced only with a reviewed ETag precondition. The deterministic `run_id` never
+serves as claim ownership. Glue partition registration occurs only after monthly
+completion.
 
 Versioned reprocessing is explicit. A new S3 version/checksum/ETag or pipeline version
 creates a different input ID and output path. The selected daily manifest set creates a

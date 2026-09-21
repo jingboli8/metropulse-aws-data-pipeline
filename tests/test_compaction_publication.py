@@ -96,7 +96,7 @@ def test_fake_s3_glue_end_to_end_and_idempotent_resume(compact_fixture) -> None:
     first = processor.process(
         selection,
         destination_bucket="lake",
-        claim_owner="test-owner",
+        owner_token="test-owner",
         processing_timestamp=timestamp,
     )
     assert first["outcome"] == "created"
@@ -104,7 +104,7 @@ def test_fake_s3_glue_end_to_end_and_idempotent_resume(compact_fixture) -> None:
     second = processor.process(
         selection,
         destination_bucket="lake",
-        claim_owner="retry-owner",
+        owner_token="retry-owner",
         processing_timestamp=datetime(2026, 9, 17, tzinfo=UTC),
     )
     assert second["outcome"] == "no_op"
@@ -112,6 +112,32 @@ def test_fake_s3_glue_end_to_end_and_idempotent_resume(compact_fixture) -> None:
     keys = compaction_keys(2020, 2, run_id)
     assert storage.get("lake", keys["completed"]).body
     assert publisher.locations[("2020", "02")] == glue_partition_location("lake", 2020, 2, run_id)
+
+
+def test_completed_retry_rejects_malformed_publication_receipt(compact_fixture) -> None:
+    selection, storage = _seed_selection(compact_fixture)
+    publisher = FakePartitionPublisher()
+    processor = S3MonthlyCompactionProcessor(storage, publisher)
+    timestamp = datetime(2026, 9, 16, tzinfo=UTC)
+    first = processor.process(
+        selection,
+        destination_bucket="lake",
+        owner_token="first-owner",
+        processing_timestamp=timestamp,
+    )
+    receipt_key = compaction_keys(2020, 2, first["run_id"])["published"]
+    storage.seed(
+        "lake",
+        receipt_key,
+        json.dumps({"location": first["location"], "run_id": first["run_id"]}).encode(),
+    )
+    with pytest.raises(Exception, match="publication receipt conflicts"):
+        processor.process(
+            selection,
+            destination_bucket="lake",
+            owner_token="retry-owner",
+            processing_timestamp=timestamp,
+        )
 
 
 def test_publication_claim_is_never_automatically_taken_over(compact_fixture) -> None:
@@ -127,7 +153,7 @@ def test_publication_claim_is_never_automatically_taken_over(compact_fixture) ->
         processor.process(
             selection,
             destination_bucket="lake",
-            claim_owner="new",
+            owner_token="new",
             processing_timestamp=datetime(2026, 9, 16, tzinfo=UTC),
         )
     assert publisher.locations == {}
@@ -147,7 +173,7 @@ def test_publication_claim_replacement_requires_exact_operator_authorized_etag(
     receipt = processor.process(
         selection,
         destination_bucket="lake",
-        claim_owner="authorized-new",
+        owner_token="authorized-new",
         processing_timestamp=datetime(2026, 9, 16, tzinfo=UTC),
         authorized_publication_claim_etag=head.etag,
     )
@@ -259,7 +285,7 @@ def test_missing_or_corrupt_selected_marker_fails_before_publication(compact_fix
         S3MonthlyCompactionProcessor(storage, publisher).process(
             selection,
             destination_bucket="lake",
-            claim_owner="test",
+            owner_token="test",
             processing_timestamp=datetime(2026, 9, 16, tzinfo=UTC),
         )
     assert publisher.locations == {}
@@ -277,7 +303,7 @@ def test_existing_conflicting_immutable_output_fails(compact_fixture) -> None:
         S3MonthlyCompactionProcessor(storage, publisher).process(
             selection,
             destination_bucket="lake",
-            claim_owner="test",
+            owner_token="test",
             processing_timestamp=datetime(2026, 9, 16, tzinfo=UTC),
         )
     assert publisher.locations == {}
@@ -294,7 +320,7 @@ def test_completion_conditional_race_accepts_identical_winner(compact_fixture) -
     receipt = S3MonthlyCompactionProcessor(storage, publisher).process(
         selection,
         destination_bucket="lake",
-        claim_owner="test",
+        owner_token="test",
         processing_timestamp=datetime(2026, 9, 16, tzinfo=UTC),
     )
     assert receipt["outcome"] == "created"

@@ -263,9 +263,14 @@ def test_container_verifier_has_no_push_or_aws_command() -> None:
     assert '"--load"' in script
     assert "& docker @buildArguments" in script
     assert "container_smoke.py" in script
+    assert "container_operations_smoke.py" in script
     assert "audit_lambda_task.py" in script
     assert "pyarrow.__version__" in script
     assert "metropulse.aws.lambda_handler.lambda_handler" in script
+    assert "metropulse.aws.compaction_lambda_handler.lambda_handler" in script
+    assert "metropulse.aws.audit_lambda_handler.lambda_handler" in script
+    assert "COMPACTION_HANDLER_IMPORT_OK" in script
+    assert "AUDIT_HANDLER_IMPORT_OK" in script
     assert "HISTORY_SECRET_SCAN_OK" in script
     assert re.search(r"\bfind\b", script) is None
     assert "/bin/sh" not in script

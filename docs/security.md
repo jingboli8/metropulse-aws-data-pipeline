@@ -85,10 +85,17 @@ default-user, and Docker-history secret checks.
   generated data, Terraform state, plans, and image archives.
 - Never inspect local AWS credential files as part of this workflow.
 
-## Future compactor permissions
+## Operations roles
 
-Phase 6 introduces no IAM or Terraform changes. A future compactor role needs exact-key
-reads for selected validation markers and staging objects, conditional writes only under
-the curated and compaction-control prefixes, and `glue:GetTable`, `glue:GetPartition`,
-`glue:CreatePartition`, and `glue:UpdatePartition` for the one database/table. It needs no
-Athena call, partition deletion, broad bucket listing, or wildcard S3 permission.
+Phase 7 defines separate roles without applying them. The compactor can read exact
+validation/compaction evidence and staging/curated objects, write only curated and
+compaction-control prefixes, and call `glue:GetTable`, `glue:GetPartition`,
+`glue:CreatePartition`, and `glue:UpdatePartition` for one catalog/database/table. The
+auditor can only read audit/compaction control evidence, curated objects, and Glue table
+or partition metadata. The Scheduler role may invoke only the audit Lambda.
+
+None can list a bucket, execute Athena, delete a partition, write ECR, administer IAM,
+or use wildcard Allow actions/resources. EMF travels through each function's restricted
+log group and requires no `cloudwatch:PutMetricData`. The validation role is unchanged.
+Current `control/` evidence does not expire while current curated objects are retained;
+only noncurrent control versions have bounded lifecycle expiry.

@@ -97,5 +97,7 @@ receipt. A failed replacement before Glue mutation leaves the old approved parti
 visible. An ambiguous response is resolved only through read-back. A stale publication
 claim requires operator reconciliation and is never taken over automatically.
 
-S3 object creation is atomic, but S3 and Glue are not one transaction. Phase 7 owns the
-scheduled invocation, bounded concurrency, metrics, alarms, and cross-month audit.
+S3 object creation is atomic, but S3 and Glue are not one transaction. Phase 7 supplies
+an on-demand Lambda, unique invocation owner tokens, bounded concurrency, metrics,
+alarms, and the scheduled cross-month audit. Static historical compaction is not
+scheduled.

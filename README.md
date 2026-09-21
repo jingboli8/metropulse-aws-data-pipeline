@@ -9,8 +9,8 @@ not manufacturing production-line data and not a table of confirmed failures.
 The repository contains the Phase -1 feasibility study, Phase 0 architecture contracts,
 the Phase 1 AWS-independent validation core, Phase 2 local daily backfill, Phase 3
 offline-tested S3/Lambda adapter, Phase 4 container and Terraform definitions, Phase 5
-query contracts, and Phase 6 deterministic monthly compaction contracts. It does not
-deploy or operate the AWS pipeline described below.
+query contracts, Phase 6 deterministic monthly compaction, and Phase 7 scheduled
+operations definitions. It does not deploy or operate the AWS pipeline described below.
 
 ## Proposed pipeline
 
@@ -27,7 +27,8 @@ flowchart LR
         Validate[Validation Lambda]
         Staging[S3 staging daily Parquet]
         Quarantine[S3 quarantine records]
-        Compact[Scheduled monthly compaction]
+        Compact[On-demand monthly compaction]
+        Audit[Scheduled integrity audit]
         Curated[S3 curated monthly Parquet]
         Catalog[Glue Data Catalog]
         Athena[Amazon Athena]
@@ -48,6 +49,7 @@ flowchart LR
     Curated --> Catalog --> Athena
     Validate --> Observe
     Compact --> Observe
+    Control --> Audit --> Observe
 ```
 
 The implementation deliberately uses Amazon S3, AWS Lambda, EventBridge Scheduler,
@@ -219,8 +221,8 @@ yet exist.
 Phase 5 defines a separate `infra/query` Terraform root containing an explicit Glue
 database, an external Snappy Parquet table, and an Athena engine version 3 workgroup. The
 table catalogs curated monthly data only, uses `year` and `month` partition columns, and
-has partition projection disabled. It currently has no partitions because monthly
-compaction begins in Phase 6; daily staging is intentionally unsupported for analytics.
+has partition projection disabled. It currently has no deployed partitions; Phase 6
+proves compaction locally, while daily staging remains unsupported for analytics.
 
 The workgroup enforces an SSE-S3 result location in the isolated results bucket, expected
 bucket ownership, and a 256 MiB per-query scan cutoff. Existing S3 lifecycle policy
@@ -257,6 +259,30 @@ count is zero. The monthly outputs contain 327 gaps greater than 60 seconds, and
 occur across month boundaries, reconciling to the full-history total of 331. An identical
 rerun resumed all eight immutable runs with unchanged IDs, sizes, and SHA-256 values.
 
+## Phase 7 scheduled operations
+
+MetroPT-3 is a closed historical source ending on 2020-09-01. Phase 7 therefore keeps
+monthly compaction on demand and schedules only a weekly full-checksum integrity audit.
+Compaction requires an exact immutable approved selection; the audit requires an exact
+pinned inventory. Neither workflow lists S3 to infer approval or current state.
+
+The separate `infra/operations` root defines least-privilege compaction and read-only
+audit roles, two digest-pinned image Lambdas, finite log retention, bounded concurrency,
+alarms, a compact dashboard, and an EventBridge Scheduler job for Monday 06:00 UTC. The
+schedule is disabled by default until curated partitions and a reviewed inventory exist.
+A heartbeat alarm is intentionally omitted because CloudWatch caps the relevant alarm
+evaluation window at seven days, which cannot safely allow a weekly cadence plus delivery
+grace. Known source gaps remain observations and do not trigger operational alarms.
+
+The Python handlers and all Terraform definitions have offline test evidence. The user
+also completed the external Linux amd64 container verification. PyArrow 21.0.0 and all
+three handler imports and configured commands passed; the validation smoke produced one
+valid row and Snappy output, while the operations smoke reconciled two rows and one
+timestamp gap. The task-root audit inspected 762 entries, and the Lambda default-user and
+Docker-history secret checks passed. The loaded image was 233,386,762 bytes
+(approximately 222.6 MiB). These are local packaging results, not AWS deployment
+evidence; no AWS resource has been deployed.
+
 ## Design documents
 
 - [Architecture](docs/architecture.md)
@@ -271,6 +297,7 @@ rerun resumed all eight immutable runs with unchanged IDs, sizes, and SHA-256 va
 - [Cost controls](docs/cost-control.md)
 - [Glue and Athena query layer](docs/query-layer.md)
 - [Monthly compaction operations](docs/monthly-compaction.md)
+- [Scheduled operations](docs/scheduled-operations.md)
 - Architecture decisions: [source ingestion](docs/adr/001-source-ingestion.md),
   [timestamp semantics](docs/adr/002-timestamp-semantics.md),
   [idempotency](docs/adr/003-idempotency.md),
@@ -278,7 +305,8 @@ rerun resumed all eight immutable runs with unchanged IDs, sizes, and SHA-256 va
   [schema normalization](docs/adr/005-schema-normalization.md),
   [Lambda packaging](docs/adr/006-lambda-packaging.md),
   [curated partition publication](docs/adr/007-curated-partition-publication.md), and
-  [monthly compaction publication](docs/adr/008-monthly-compaction-publication.md)
+  [monthly compaction publication](docs/adr/008-monthly-compaction-publication.md), and
+  [static-source scheduled operations](docs/adr/009-static-source-scheduled-operations.md)
 - Phase -1 evidence: [data source](docs/data-source.md) and
   [feasibility report](docs/feasibility-report.md)
 

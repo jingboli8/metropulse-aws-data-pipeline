@@ -47,7 +47,7 @@ operator authorization is required. Explicit authorization pins the exact prior 
 ETag and replaces it conditionally; an intervening change remains a conflict. This claim
 is not an S3/Glue transaction. Absolute
 fencing against a paused former publisher is impossible with this design, so Phase 7
-also applies bounded/reserved scheduler concurrency. Ambiguous Glue responses are read
+applies reserved concurrency to the on-demand compactor. Ambiguous Glue responses are read
 back and accepted only at the expected old or fully completed requested location.
 
 February 2020 may report 2020-02-29 missing, April may report 2020-04-26 missing, and
@@ -62,8 +62,10 @@ safe. A failure before Glue mutation leaves the old partition visible. S3 constr
 and Glue publication remain separately observable, and an operator must reconcile the
 rare ambiguous concurrency case rather than accepting last-writer-wins behavior.
 
-The deterministic `run_id` owns both construction and publication claims. Retries of the
-same run therefore converge even when invocation/request metadata changes; claim owner
-labels and processing timestamps remain receipt metadata and do not alter the claim or
-run identity. A different run cannot replace the month claim without the explicit ETag
-authorization above.
+The deterministic `run_id` identifies processing but does not own a claim. Each concrete
+invocation has a unique `owner_token`; two invocations of one run cannot both pass an
+ownership check. The owner token stays out of run, selection, output, and logical
+completion identities. A completed retry first validates the receipt, immutable output,
+completion evidence, and Glue location and may then return a verified no-op without
+acquiring a fresh claim. A different run cannot replace the month claim without the
+explicit ETag authorization above.

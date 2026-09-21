@@ -223,37 +223,42 @@ updates. No EventBridge schedule is enabled.
 **Stop point:** local compaction and partition-publication contracts pass; do not deploy,
 schedule, or add alarms.
 
-## Phase 7: CloudWatch metrics, alarms, and scheduled audit
+## Phase 7: On-demand compaction operations and scheduled integrity audit
 
 **Deliverables**
 
-- Structured JSON logging and low-cardinality custom metrics for validation, compaction,
-  quarantine rules, sampling/gaps, duration, and reconciliation.
-- Audit Lambda that inventories raw and immutable manifests, checks daily/monthly output,
-  and records audit results under control.
-- CloudWatch alarms for invocation failures, quarantine spikes, reconciliation failures,
-  and missing scheduled monthly output.
-- EventBridge Scheduler definitions for monthly compaction and post-grace-period audit,
-  disabled by default in development with bounded retries and event age.
+- Exact immutable selection approval and audit-inventory publication CLIs with no bucket
+  discovery.
+- An on-demand compaction Lambda and a read-only full-checksum audit Lambda using the
+  same digest-pinned image with different commands.
+- Structured JSON logs and low-cardinality EMF metrics for validation, compaction, and
+  audit outcomes.
+- Separate least-privilege roles, finite log groups, failure/drift alarms, a compact
+  dashboard, and a weekly audit schedule disabled by default.
 
 **Acceptance criteria**
 
-- Duplicate events do not double-count terminal data metrics where conditional completion
-  can prevent it. Attempt/failure metrics remain truthful about retries.
-- Alarm tests reach and recover from alarm state using synthetic failures. Logs contain
-  correlation IDs and counts but no raw records, credentials, or secrets.
-- Enabling a schedule requires an explicit environment variable and reviewed plan.
+- Unique invocation owner tokens prevent two same-run invocations from owning one claim;
+  verified completed work can return a no-op before reacquiring a claim.
+- The scheduled audit reads one exact pinned inventory, reports known historical gaps as
+  quality observations, and fails on broken evidence, reconciliation, or catalog drift.
+- Enabling the schedule requires exact inventory inputs. No heartbeat alarm is defined:
+  CloudWatch cannot express the required weekly cadence plus one-day grace within its
+  seven-day maximum evaluation window.
 
 **Tests**
 
-- Unit tests for metric/log payloads, audit inventory, grace periods, and alarm thresholds.
-- When authorized, synthetic CloudWatch and schedule smoke tests followed by disabling
-  schedules again in development.
+- Unit tests for owner-token concurrency, selection/inventory identity, handlers,
+  continuity, metric/log payloads, IAM, lifecycle, and schedule/heartbeat behavior.
+- Terraform native tests with a mocked provider and an external offline container smoke
+  before commit. Real service evidence remains a later authorized deployment concern.
 
-**AWS resources affected:** EventBridge Scheduler schedules/roles, audit Lambda, IAM,
-CloudWatch custom metrics, alarms, dashboard, and log groups.
+**AWS resources affected:** definitions for compaction/audit Lambdas and roles,
+EventBridge Scheduler and its invocation role, CloudWatch alarms/dashboard/log groups,
+and the existing platform control-evidence lifecycle. Nothing is applied in Phase 7.
 
-**Stop point:** observability evidence passes and development schedules are disabled.
+**Stop point:** offline evidence and external container verification pass; do not deploy,
+enable the schedule, merge, or begin Phase 8.
 
 ## Phase 8: GitHub Actions, end-to-end evidence, README polish, and teardown
 

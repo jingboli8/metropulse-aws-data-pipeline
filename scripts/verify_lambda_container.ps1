@@ -64,7 +64,7 @@ try {
             "--platform", "linux/amd64",
             "--entrypoint", "python",
             $ImageName,
-            "-c", "import pyarrow; import metropulse.aws.lambda_handler; print('PYARROW_OK version=' + pyarrow.__version__); print('HANDLER_IMPORT_OK')"
+            "-c", "import pyarrow; from metropulse.aws.lambda_handler import lambda_handler as validation_handler; from metropulse.aws.compaction_lambda_handler import lambda_handler as compaction_handler; from metropulse.aws.audit_lambda_handler import lambda_handler as audit_handler; assert callable(validation_handler) and callable(compaction_handler) and callable(audit_handler); print('PYARROW_OK version=' + pyarrow.__version__); print('VALIDATION_HANDLER_IMPORT_OK'); print('COMPACTION_HANDLER_IMPORT_OK'); print('AUDIT_HANDLER_IMPORT_OK')"
         )
         $versions = & docker @importArguments
         Assert-True ($LASTEXITCODE -eq 0) "PyArrow or handler import failed."
@@ -82,6 +82,19 @@ try {
         )
         & docker @smokeArguments
         Assert-True ($LASTEXITCODE -eq 0) "Deterministic offline processing smoke test failed."
+
+        $operationsSmokePath = (Resolve-Path "scripts/container_operations_smoke.py").Path
+        $operationsSmokeArguments = @(
+            "run", "--rm",
+            "--platform", "linux/amd64",
+            "--env", "PYTHONPATH=/var/task",
+            "--mount", "type=bind,source=$operationsSmokePath,target=/tmp/container_operations_smoke.py,readonly",
+            "--entrypoint", "python",
+            $ImageName,
+            "/tmp/container_operations_smoke.py"
+        )
+        & docker @operationsSmokeArguments
+        Assert-True ($LASTEXITCODE -eq 0) "Deterministic offline compaction/audit smoke test failed."
 
         $auditPath = (Resolve-Path "scripts/audit_lambda_task.py").Path
         $auditArguments = @(
@@ -102,7 +115,9 @@ try {
         $secretPattern = '(AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|SECRET_ACCESS_KEY|PASSWORD=|TOKEN=|PRIVATE_KEY)'
         Assert-True (-not ($history -match $secretPattern)) "Docker history contains a secret-bearing build argument or value."
 
-        Write-Output "HANDLER_CONFIG_OK metropulse.aws.lambda_handler.lambda_handler"
+        Write-Output "VALIDATION_HANDLER_CONFIG_OK metropulse.aws.lambda_handler.lambda_handler"
+        Write-Output "COMPACTION_HANDLER_CONFIG_OK metropulse.aws.compaction_lambda_handler.lambda_handler"
+        Write-Output "AUDIT_HANDLER_CONFIG_OK metropulse.aws.audit_lambda_handler.lambda_handler"
         Write-Output "LAMBDA_DEFAULT_USER_CONFIG_OK"
         Write-Output "HISTORY_SECRET_SCAN_OK"
         Write-Output "IMAGE_ID=$imageId"

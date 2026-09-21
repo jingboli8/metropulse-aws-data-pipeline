@@ -49,5 +49,26 @@ completion prevents practical double counting of terminal business metrics, but 
 not an exactly-once metrics system.
 
 Per-object sampling warnings describe only timestamps visible in that raw object.
-Cross-partition gaps, missing dates, overlaps, and reversed boundaries remain the future
-scheduled/global audit job's responsibility.
+Cross-partition gaps, missing dates, overlaps, and reversed boundaries belong to the
+scheduled/global audit, not individual validation invocations.
+
+## Compaction and audit telemetry
+
+Operations metrics use the same namespace with exactly `Environment` and
+`ComponentVersion` as dimensions. Run ID, inventory ID, month, key, request ID, error
+text, and rule ID remain structured log fields.
+
+| Component | Metrics |
+|---|---|
+| Compaction | `CompactionRunsStarted`, `CompactionRunsSucceeded`, `CompactionRunsFailed`, `CompactionRunsNoOp`, `SelectedDays`, `CompactionInputRows`, `CompactionOutputRows`, `CompactionReconciliationFailures`, `ImmutableOutputConflicts`, `PublicationConflicts`, `CompactionDurationMs` |
+| Audit | `AuditRunsSucceeded`, `AuditRunsFailed`, `MonthsInspected`, `MissingPublications`, `PublicationDrift`, `AuditRowReconciliationFailures`, `CrossMonthSignificantGaps`, `CrossMonthOverlaps`, `CrossMonthReversedBoundaries`, `AuditDurationMs` |
+
+Compaction output counts are emitted only for a new publication. A fully verified retry
+emits a no-op, not a second publication. Audit gap and coverage metrics are observations;
+the verified 331 significant gaps do not increment an operational failure metric.
+
+Alarms cover Lambda errors/throttles, reconciliation failures, immutable/publication
+conflicts, missing approved publications, publication drift, and validation quarantine
+rate. Missing data is non-breaching for these event-driven failure metrics. There is no
+heartbeat alarm: CloudWatch limits the relevant evaluation window to seven days, which
+cannot reliably represent a weekly schedule plus delivery and ingestion grace.

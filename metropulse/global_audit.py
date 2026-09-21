@@ -4,19 +4,21 @@ from __future__ import annotations
 
 import argparse
 import json
-import statistics
 from collections import Counter
 from collections.abc import Mapping
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
+from metropulse.continuity import (
+    SIGNIFICANT_GAP_SECONDS,
+    ContinuityEndpoint,
+    evaluate_boundaries,
+    interval_summary,
+)
 from metropulse.local_io import write_text_atomic
 
 GLOBAL_AUDIT_VERSION = "1.0.0"
-EXPECTED_INTERVAL_MIN_SECONDS = 9
-EXPECTED_INTERVAL_MAX_SECONDS = 13
-SIGNIFICANT_GAP_SECONDS = 60
 
 
 class GlobalAuditError(ValueError):
@@ -27,28 +29,6 @@ def _distribution_items(distribution: Counter[int]) -> list[dict[str, int]]:
     return [
         {"count": distribution[seconds], "seconds": seconds} for seconds in sorted(distribution)
     ]
-
-
-def _interval_summary(distribution: Counter[int]) -> dict[str, int | float | None]:
-    significant = [
-        seconds
-        for seconds, count in sorted(distribution.items())
-        if seconds > SIGNIFICANT_GAP_SECONDS
-        for _ in range(count)
-    ]
-    return {
-        "abnormal_positive_interval_count": sum(
-            count
-            for seconds, count in distribution.items()
-            if seconds > 0
-            and not EXPECTED_INTERVAL_MIN_SECONDS <= seconds <= EXPECTED_INTERVAL_MAX_SECONDS
-        ),
-        "maximum_significant_gap_seconds": max(significant, default=None),
-        "median_significant_gap_seconds": (statistics.median(significant) if significant else None),
-        "minimum_significant_gap_seconds": min(significant, default=None),
-        "significant_gap_count": len(significant),
-        "total_delta_count": sum(distribution.values()),
-    }
 
 
 def _load_manifests(output_root: Path) -> list[dict[str, Any]]:
@@ -118,10 +98,31 @@ def audit_partition_continuity(
     overlap_findings: list[dict[str, object]] = []
     boundary_warnings: list[dict[str, object]] = []
     unassessable_boundary_count = 0
-    for previous, current in zip(manifests, manifests[1:], strict=False):
-        previous_date = date.fromisoformat(previous["source_date"])
-        current_date = date.fromisoformat(current["source_date"])
-        missing_date_count = max((current_date - previous_date).days - 1, 0)
+    endpoints = tuple(
+        ContinuityEndpoint(
+            label=str(manifest["source_date"]),
+            partition_date=date.fromisoformat(str(manifest["source_date"])),
+            first_timestamp=(
+                datetime.fromisoformat(str(manifest["first_valid_event_timestamp_local"]))
+                if manifest.get("first_valid_event_timestamp_local") is not None
+                else None
+            ),
+            last_timestamp=(
+                datetime.fromisoformat(str(manifest["last_valid_event_timestamp_local"]))
+                if manifest.get("last_valid_event_timestamp_local") is not None
+                else None
+            ),
+        )
+        for manifest in manifests
+    )
+    try:
+        evaluated, boundary_distribution = evaluate_boundaries(endpoints)
+    except ValueError as error:
+        raise GlobalAuditError(str(error)) from error
+    for item in evaluated:
+        previous_date = date.fromisoformat(item.previous_label)
+        current_date = date.fromisoformat(item.current_label)
+        missing_date_count = item.missing_calendar_date_count
         if missing_date_count:
             finding = {
                 "current_source_date": current_date.isoformat(),
@@ -131,14 +132,12 @@ def audit_partition_continuity(
             missing_calendar_date_findings.append(finding)
             boundary_warnings.append({"rule_id": "AUDIT_MISSING_CALENDAR_DATE", **finding})
 
-        previous_last = previous.get("last_valid_event_timestamp_local")
-        current_first = current.get("first_valid_event_timestamp_local")
         finding: dict[str, object] = {
             "current_source_date": current_date.isoformat(),
             "missing_calendar_date_count": missing_date_count,
             "previous_source_date": previous_date.isoformat(),
         }
-        if previous_last is None or current_first is None:
+        if item.delta_seconds is None:
             finding.update(
                 {
                     "delta_seconds": None,
@@ -149,21 +148,8 @@ def audit_partition_continuity(
             boundary_warnings.append({"rule_id": "AUDIT_BOUNDARY_UNASSESSABLE", **finding})
             boundary_findings.append(finding)
             continue
-        previous_timestamp = datetime.fromisoformat(str(previous_last))
-        current_timestamp = datetime.fromisoformat(str(current_first))
-        if previous_timestamp.tzinfo is not None or current_timestamp.tzinfo is not None:
-            raise GlobalAuditError("Boundary timestamps must remain timezone-naive.")
-        delta = int((current_timestamp - previous_timestamp).total_seconds())
-        boundary_distribution[delta] += 1
-        status = "normal"
-        if delta < 0:
-            status = "reversed_overlap"
-        elif delta == 0:
-            status = "overlap"
-        elif delta > SIGNIFICANT_GAP_SECONDS:
-            status = "significant_gap"
-        elif not EXPECTED_INTERVAL_MIN_SECONDS <= delta <= EXPECTED_INTERVAL_MAX_SECONDS:
-            status = "abnormal_positive_interval"
+        delta = item.delta_seconds
+        status = item.status
         finding.update({"delta_seconds": delta, "status": status})
         boundary_findings.append(finding)
         if delta <= 0:
@@ -173,9 +159,9 @@ def audit_partition_continuity(
             boundary_warnings.append({"rule_id": "AUDIT_BOUNDARY_SIGNIFICANT_GAP", **finding})
 
     global_distribution = within_distribution + boundary_distribution
-    within_summary = _interval_summary(within_distribution)
-    boundary_summary = _interval_summary(boundary_distribution)
-    global_summary = _interval_summary(global_distribution)
+    within_summary = interval_summary(within_distribution)
+    boundary_summary = interval_summary(boundary_distribution)
+    global_summary = interval_summary(global_distribution)
     delta_counts_match = global_summary["total_delta_count"] == (
         within_summary["total_delta_count"] + boundary_summary["total_delta_count"]
     )

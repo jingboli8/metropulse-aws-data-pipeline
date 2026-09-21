@@ -13,8 +13,9 @@ but adding distributed compute for this small, fixed dataset would be disproport
 ## Decision
 
 Preserve daily raw CSV as replay inputs and produce one daily staging Parquet object per
-validation boundary. A scheduled monthly process reads completed daily manifests and
-writes one deterministic Snappy Parquet object for each observed month. Curated storage
+validation boundary. An on-demand monthly process reads an explicitly approved set of
+completed daily manifests and writes one deterministic Snappy Parquet object for each
+observed month. Curated storage
 is partitioned by `year` and `month`, never day. It retains `source_date` as a column.
 
 The compactor does not append in place. It writes a complete deterministic run, validates

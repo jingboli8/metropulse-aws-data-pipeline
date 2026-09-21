@@ -111,10 +111,10 @@ variable "quarantine_retention_days" {
   default     = 365
 }
 
-variable "control_retention_days" {
-  description = "Current claims, manifests, and audits retention."
+variable "control_noncurrent_retention_days" {
+  description = "Bounded retention for superseded control-object versions; current evidence does not expire."
   type        = number
-  default     = 730
+  default     = 90
 }
 
 variable "athena_results_retention_days" {

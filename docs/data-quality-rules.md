@@ -75,7 +75,7 @@ set to partially publish. The audit still records their metrics and failure stat
 | `AUDIT_MONTHLY_ROWS` | Audit reconciliation | Sum of selected daily input rows equals curated rows plus associated quarantine rows. | Do not publish the monthly completion manifest/catalog partition; alarm. |
 | `AUDIT_MONTHLY_VALID_ROWS` | Audit reconciliation | Curated rows equal the sum of valid rows from the exact selected daily manifests. | Do not publish; alarm. |
 | `AUDIT_EXPECTED_DAYS` | Audit reconciliation + warning | The month's selected source dates and daily manifests agree with the raw inventory. | Mark month incomplete; do not silently omit raw inputs. |
-| `AUDIT_SCHEDULED_OUTPUT` | Audit reconciliation | Expected monthly completion marker exists after the configured schedule grace period. | Missing-output alarm. |
+| `AUDIT_APPROVED_PUBLICATION` | Audit reconciliation | Every month named by the exact inventory has pinned completion/publication evidence, a verified curated object, and the expected current Glue location. | Fail the audit and emit missing-publication or drift metrics. |
 | `AUDIT_OUTPUT_CHECKSUM` | Audit reconciliation | Stored output checksums match recomputed checksums during an audit when enabled. | Mark audit failed; alarm and investigate before reprocessing. |
 
 Monthly compaction may legitimately have no quarantine rows. “As appropriate” means the

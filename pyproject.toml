@@ -18,6 +18,7 @@ metropulse-verify-local = "metropulse.acceptance:main"
 metropulse-audit-continuity = "metropulse.global_audit:main"
 metropulse-accept-lambda-fake = "metropulse.aws.acceptance:main"
 metropulse-compact-monthly = "metropulse.compaction_cli:main"
+metropulse-operations = "metropulse.operations_cli:main"
 
 [project.optional-dependencies]
 dev = [
