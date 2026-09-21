@@ -13,6 +13,7 @@ from scripts.clean_lambda_task import clean_task_root
 
 ROOT = Path(__file__).resolve().parents[1]
 INFRA = ROOT / "infra"
+ANSI_ESCAPE = re.compile(r"\x1b(?:[@-_]|\[[0-?]*[ -/]*[@-~])")
 
 
 def _read(path: str) -> str:
@@ -349,9 +350,9 @@ def test_container_verifier_stops_when_loaded_image_is_unavailable(tmp_path: Pat
     )
 
     assert completed.returncode != 0
-    assert "tagged image 'metropulse-lambda:phase4-local' is unavailable" in (
-        completed.stdout + completed.stderr
-    )
+    combined_output = completed.stdout + completed.stderr
+    normalized_output = ANSI_ESCAPE.sub("", combined_output)
+    assert "tagged image 'metropulse-lambda:phase4-local' is unavailable" in normalized_output
     calls = call_log.read_text(encoding="utf-8").splitlines()
     assert any(call.startswith("buildx build ") and "--load" in call for call in calls)
     assert any(call.startswith("image ls ") for call in calls)
