@@ -44,7 +44,7 @@ class S3MonthlyCompactionProcessor:
         selection: MonthlySelection,
         *,
         destination_bucket: str,
-        claim_owner: str,
+        owner_token: str,
         processing_timestamp: datetime,
         expected_current_location: str | None = None,
         authorized_publication_claim_etag: str | None = None,
@@ -52,21 +52,59 @@ class S3MonthlyCompactionProcessor:
         """Validate, construct, complete, and expose one immutable monthly run."""
         if processing_timestamp.tzinfo is None or processing_timestamp.utcoffset() is None:
             raise ValueError("processing_timestamp must be timezone-aware")
+        if not owner_token.strip():
+            raise ValueError("owner_token must not be empty")
         for item in selection.inputs:
             self._validate_marker(item)
         result = compact_month(selection, self._read_staging, bounds=self.bounds)
         keys = compaction_keys(selection.year, selection.month, result.run_id)
         selection_body = canonical_json(build_selection_document(selection, result.run_id)) + b"\n"
         completion_body = canonical_json(result.completion) + b"\n"
+        location = glue_partition_location(
+            destination_bucket, selection.year, selection.month, result.run_id
+        )
+        prior_receipt = self._read_receipt(destination_bucket, keys["published"])
+        if prior_receipt is not None:
+            self._verify_completed_publication(
+                destination_bucket,
+                keys,
+                selection_body=selection_body,
+                curated_body=result.parquet_bytes,
+                completion_body=completion_body,
+                receipt=prior_receipt,
+                run_id=result.run_id,
+                location=location,
+            )
+            publication = self.publisher.publish(
+                year=f"{selection.year:04d}",
+                month=f"{selection.month:02d}",
+                location=location,
+                expected_current_location=location,
+            )
+            return self._result(
+                result.run_id,
+                location,
+                publication,
+                owner_token,
+                processing_timestamp,
+                newly_completed=False,
+                newly_published=False,
+            )
+
         construction_claim = (
             canonical_json(
-                {"contract": "metropulse-compaction-construction-claim-v1", "run_id": result.run_id}
+                {
+                    "contract": "metropulse-compaction-construction-claim-v1",
+                    "owner_token": owner_token,
+                    "run_id": result.run_id,
+                }
             )
             + b"\n"
         )
-        self._put_immutable(
-            destination_bucket, keys["claim"], construction_claim, "application/json"
+        self._acquire_owned_claim(
+            destination_bucket, keys["claim"], construction_claim, "construction"
         )
+        self._verify_claim(destination_bucket, keys["claim"], construction_claim)
         self._put_immutable(
             destination_bucket, keys["selection"], selection_body, "application/json"
         )
@@ -76,11 +114,12 @@ class S3MonthlyCompactionProcessor:
             result.parquet_bytes,
             "application/vnd.apache.parquet",
         )
-        self._put_immutable(
+        newly_completed = self._put_immutable(
             destination_bucket, keys["completed"], completion_body, "application/json"
         )
         claim = {
             "contract": "metropulse-compaction-publication-claim-v1",
+            "owner_token": owner_token,
             "run_id": result.run_id,
         }
         claim_body = canonical_json(claim) + b"\n"
@@ -91,9 +130,6 @@ class S3MonthlyCompactionProcessor:
             authorized_previous_etag=authorized_publication_claim_etag,
         )
         self._verify_claim(destination_bucket, keys["publication_claim"], claim_body)
-        location = glue_partition_location(
-            destination_bucket, selection.year, selection.month, result.run_id
-        )
         publication = self.publisher.publish(
             year=f"{selection.year:04d}",
             month=f"{selection.month:02d}",
@@ -101,39 +137,29 @@ class S3MonthlyCompactionProcessor:
             expected_current_location=expected_current_location,
         )
         self._verify_claim(destination_bucket, keys["publication_claim"], claim_body)
-        try:
-            prior_receipt = json.loads(
-                self.storage.get(destination_bucket, keys["published"]).body.decode("utf-8")
-            )
-        except ObjectNotFound:
-            prior_receipt = None
-        if prior_receipt is not None:
-            if (
-                prior_receipt.get("location") != location
-                or prior_receipt.get("run_id") != result.run_id
-            ):
-                raise ImmutableOutputConflict("immutable publication receipt conflicts")
-            return {
-                "claim_owner": claim_owner,
-                "location": location,
-                "outcome": publication,
-                "processing_timestamp": processing_timestamp.isoformat(),
-                "run_id": result.run_id,
-            }
         receipt = {
-            "claim_owner": claim_owner,
+            "contract": "metropulse-compaction-publication-receipt-v1",
             "location": location,
+            "owner_token": owner_token,
             "outcome": publication,
             "processing_timestamp": processing_timestamp.isoformat(),
             "run_id": result.run_id,
         }
-        self._put_immutable(
+        newly_published = self._put_immutable(
             destination_bucket,
             keys["published"],
             canonical_json(receipt) + b"\n",
             "application/json",
         )
-        return receipt
+        return self._result(
+            result.run_id,
+            location,
+            publication,
+            owner_token,
+            processing_timestamp,
+            newly_completed=newly_completed,
+            newly_published=newly_published,
+        )
 
     def _validate_marker(self, item: SelectedDailyInput) -> None:
         version = (
@@ -224,7 +250,7 @@ class S3MonthlyCompactionProcessor:
         if len(stored.body) != size or sha256_bytes(stored.body) != checksum:
             raise ImmutableOutputConflict("completion reference checksum or size mismatch")
 
-    def _put_immutable(self, bucket: str, key: str, body: bytes, content_type: str) -> None:
+    def _put_immutable(self, bucket: str, key: str, body: bytes, content_type: str) -> bool:
         checksum = sha256_bytes(body)
         try:
             self.storage.put(
@@ -236,10 +262,30 @@ class S3MonthlyCompactionProcessor:
                 metadata={"sha256": checksum},
                 if_none_match=True,
             )
+            return True
         except ConditionalWriteFailed:
             existing = self.storage.get(bucket, key)
             if len(existing.body) != len(body) or sha256_bytes(existing.body) != checksum:
                 raise ImmutableOutputConflict(f"immutable S3 object conflicts: {key}") from None
+            return False
+
+    def _acquire_owned_claim(self, bucket: str, key: str, body: bytes, claim_kind: str) -> None:
+        try:
+            self.storage.put(
+                bucket,
+                key,
+                body,
+                content_type="application/json",
+                content_encoding=None,
+                metadata={"sha256": sha256_bytes(body)},
+                if_none_match=True,
+            )
+        except ConditionalWriteFailed:
+            existing = self.storage.get(bucket, key)
+            if existing.body != body:
+                raise PublicationConflict(
+                    f"{claim_kind} claim is owned by another invocation"
+                ) from None
 
     def _acquire_publication_claim(
         self,
@@ -289,3 +335,79 @@ class S3MonthlyCompactionProcessor:
             raise PublicationConflict("publication claim disappeared") from error
         if observed != body:
             raise PublicationConflict("publication claim ownership changed")
+
+    def _read_receipt(self, bucket: str, key: str) -> dict[str, Any] | None:
+        try:
+            value = json.loads(self.storage.get(bucket, key).body.decode("utf-8", errors="strict"))
+        except ObjectNotFound:
+            return None
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise ImmutableOutputConflict("publication receipt is malformed") from error
+        if not isinstance(value, dict):
+            raise ImmutableOutputConflict("publication receipt is malformed")
+        return value
+
+    def _verify_completed_publication(
+        self,
+        bucket: str,
+        keys: dict[str, str],
+        *,
+        selection_body: bytes,
+        curated_body: bytes,
+        completion_body: bytes,
+        receipt: dict[str, Any],
+        run_id: str,
+        location: str,
+    ) -> None:
+        if (
+            receipt.get("contract") != "metropulse-compaction-publication-receipt-v1"
+            or receipt.get("location") != location
+            or receipt.get("run_id") != run_id
+            or receipt.get("outcome") not in {"created", "updated", "no_op"}
+            or not isinstance(receipt.get("owner_token"), str)
+            or not receipt["owner_token"].strip()
+        ):
+            raise ImmutableOutputConflict("immutable publication receipt conflicts")
+        try:
+            timestamp = datetime.fromisoformat(str(receipt["processing_timestamp"]))
+        except (KeyError, ValueError) as error:
+            raise ImmutableOutputConflict("immutable publication receipt conflicts") from error
+        if timestamp.tzinfo is None or timestamp.utcoffset() is None:
+            raise ImmutableOutputConflict("immutable publication receipt conflicts")
+        for key, body in (
+            (keys["selection"], selection_body),
+            (keys["curated"], curated_body),
+            (keys["completed"], completion_body),
+        ):
+            try:
+                existing = self.storage.get(bucket, key)
+            except ObjectNotFound as error:
+                raise ImmutableOutputConflict(
+                    "completed publication references missing immutable output"
+                ) from error
+            if existing.body != body:
+                raise ImmutableOutputConflict(
+                    "completed publication references conflicting immutable output"
+                )
+
+    @staticmethod
+    def _result(
+        run_id: str,
+        location: str,
+        publication: str,
+        owner_token: str,
+        processing_timestamp: datetime,
+        *,
+        newly_completed: bool,
+        newly_published: bool,
+    ) -> dict[str, Any]:
+        return {
+            "location": location,
+            "newly_completed": newly_completed,
+            "newly_published": newly_published,
+            "outcome": publication,
+            "owner_token": owner_token,
+            "processing_timestamp": processing_timestamp.isoformat(),
+            "run_id": run_id,
+            "status": "published" if newly_published else "verified_no_op",
+        }

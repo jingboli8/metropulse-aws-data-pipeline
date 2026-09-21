@@ -88,6 +88,31 @@ class GluePartitionPublisher:
             raise
 
 
+class GluePartitionReader:
+    """Read exact Glue year/month partitions through an injected client."""
+
+    def __init__(self, client: Any, *, database: str, table: str) -> None:
+        self.client = client
+        self.database = database
+        self.table = table
+
+    def get_partition(self, *, year: str, month: str) -> dict[str, Any] | None:
+        """Return one exact partition after validating the configured table schema."""
+        table = self.client.get_table(DatabaseName=self.database, Name=self.table)["Table"]
+        _validate_table(table)
+        try:
+            return self.client.get_partition(
+                DatabaseName=self.database,
+                TableName=self.table,
+                PartitionValues=[year, month],
+            )["Partition"]
+        except Exception as error:
+            code = getattr(error, "response", {}).get("Error", {}).get("Code")
+            if code in {"EntityNotFoundException", "404"}:
+                return None
+            raise
+
+
 def _validate_table(table: dict[str, Any]) -> None:
     expected_columns = [
         {"Name": field.normalized_name, "Type": field.athena_type} for field in FIELD_DEFINITIONS

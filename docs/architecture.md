@@ -48,12 +48,12 @@ flowchart TB
         Validator --> Staging
         Validator --> Quarantine
         Validator <--> Control
-        Scheduler --> Compactor
         Scheduler --> Auditor
+        Operator[Reviewed on-demand invocation] --> Compactor
         Staging --> Compactor --> Curated
         Quarantine -->|manifest counts only| Compactor
         Compactor <--> Control
-        Auditor --> Control
+        Control --> Auditor
         Curated --> Glue --> Athena --> Results
         Validator --> CW
         Compactor --> CW
@@ -74,8 +74,9 @@ observability adapters using in-memory S3. Phase 4 adds the externally verified 
 amd64 Lambda container definition and locally validated Terraform for ECR, private S3
 storage, IAM, the log group, Lambda, and the raw-object notification. Nothing has been
 deployed. Phase 5 adds offline Terraform contracts for the Glue database, curated table,
-and Athena workgroup, but creates no partitions or AWS resources. The scheduled audit,
-compactor, and approved curated partition publication remain later-phase architecture.
+and Athena workgroup, but creates no partitions or AWS resources. Phase 6 implements
+compaction and guarded publication contracts. Phase 7 adds offline operations handlers,
+roles, alarms, and the disabled-by-default audit schedule. Nothing is deployed.
 
 ## Event and processing flow
 
@@ -92,19 +93,20 @@ compactor, and approved curated partition publication remain later-phase archite
 4. Valid rows are normalized into one daily Snappy Parquet staging object. Invalid rows
    go to a deterministic quarantine object with their original record, rule IDs, and
    lineage. A control manifest records counts, checksums, schema version, and completion.
-5. EventBridge Scheduler invokes compaction monthly. The compactor reads completed daily
-   manifests for the target month, creates monthly Snappy Parquet, checks reconciliation,
-   then publishes the curated manifest and partition. It never appends to a Parquet file.
+5. A reviewed operator/deployment process publishes an exact immutable monthly selection
+   and invokes compaction on demand. The compactor reads only the selected markers and
+   objects, creates monthly Snappy Parquet, checks reconciliation, then publishes the
+   curated manifest and partition. It never appends to a Parquet file.
 6. Glue exposes only `curated/`. Each year/month partition points explicitly to one
    approved immutable `run_id`; partition projection and automatic repair are disabled.
    Athena queries those partitions through a workgroup with scan limits and a separate
    encrypted query-results bucket. Until Phase 6 publishes partitions, the Phase 5 table
    is empty.
-7. A scheduled audit checks expected daily/monthly manifests, reconciliation, and
-   cross-object continuity by comparing ordered daily manifest endpoints. This audit,
-   rather than an individual validation invocation, owns partition-boundary gap,
-   overlap, reversed-boundary, and missing-date findings. All adapters emit structured
-   logs; terminal metrics are emitted once where practical.
+7. EventBridge Scheduler may run a weekly audit only after a reviewed immutable audit
+   inventory exists. The audit reads exact monthly evidence and curated objects, checks
+   Glue locations, reconciliation, and cross-month continuity. Gaps, overlaps,
+   reversed boundaries, and known missing dates are observations; operational evidence
+   failures and publication drift fail the audit. All adapters emit structured logs.
 
 ## Storage zones and ownership
 
@@ -115,12 +117,13 @@ compactor, and approved curated partition publication remain later-phase archite
 | Staging | `staging/source=metropt3/year=2020/month=02/day=01/input_id=<id>/data.parquet` | Validator | Compactor, audit | Temporary; expire after curated retention buffer |
 | Curated | `curated/metropt3/year=2020/month=02/run_id=<id>/part-00000.snappy.parquet` | Compactor | Glue/Athena, audit | Query-ready retained data |
 | Quarantine | `quarantine/source=metropt3/source_date=2020-02-01/input_id=<id>/rejected.jsonl` | Validator | Compactor reconciliation, audit/operator | Retain long enough to diagnose/reprocess |
-| Control | `control/validation/input_id=<id>/completed.json` | Validator/compactor/auditor | Pipeline components, operator | Claims, immutable manifests, audit results |
+| Control | `control/validation/input_id=<id>/completed.json` | Validator, compactor, operator approval CLI | Pipeline components, operator, read-only auditor | Claims, immutable manifests, approved selections and audit inventories |
 | Athena results | `s3://<query-results-bucket>/<workgroup>/...` | Athena | Authorized analyst | Short lifecycle; isolated from data zones |
 
 The local CLI owns landing and raw creation. The validator owns daily staging,
 quarantine, and validation manifests. The compactor owns monthly curated objects and
-compaction manifests. The auditor owns audit records. Glue and Athena have read access
+compaction manifests. The operator owns immutable audit inventories; the auditor emits
+results to structured logs and metrics without writing S3. Glue and Athena have read access
 only to curated data; Athena alone writes query results.
 
 ## Retry and failure behavior
@@ -138,9 +141,9 @@ deterministic keys, so a retry replaces its own incomplete output rather than ap
 The completion marker is written only after staging/quarantine uploads and reconciliation
 succeed. A retry after partial failure reconstructs both outputs and then completes.
 
-Lambda asynchronous invocation and scheduled jobs use bounded retry attempts and event
-age. CloudWatch alarms surface exhausted invocation failures, and the scheduled audit
-detects stale claims, absent manifests, incomplete months, and missing scheduled output.
+Lambda asynchronous invocation and the scheduled audit use bounded retry attempts and
+event age. CloudWatch alarms surface invocation failures, reconciliation failures,
+immutable/publication conflicts, absent approved publications, and Glue location drift.
 Versioned input or a changed pipeline version creates a new identity and a deliberate
 new output path; it never silently replaces another version's published curated partition.
 
@@ -154,10 +157,12 @@ and reconciliation status. Attempt/failure metrics may count retries; terminal d
 metrics are emitted only by the invocation that conditionally creates the completion
 marker.
 
-Alarms cover Lambda invocation failures, quarantine-rate spikes, reconciliation failures,
-and a missing monthly completion marker after the schedule's grace period. Dashboards
-and alarms use low-cardinality dimensions such as environment, job, and rule ID; object
-keys and input IDs stay in logs to avoid costly metric cardinality.
+Alarms cover Lambda errors and throttles, quarantine-rate spikes, reconciliation
+failures, immutable/publication conflicts, absent approved publications, and catalog
+drift. A heartbeat alarm is omitted because the CloudWatch maximum evaluation window
+cannot express a reliable eight-day grace for a weekly job. Metrics use only environment
+and component/pipeline version as
+dimensions; keys, run IDs, request IDs, dates, error text, and rule IDs remain logs.
 
 ## Security and cost controls
 
@@ -170,7 +175,8 @@ keys and input IDs stay in logs to avoid costly metric cardinality.
 - Athena uses an enforced workgroup, per-query scan limits, metrics, and isolated query
   results. Glue tables point only to curated data.
 - Lifecycle policies expire staging data and query results after configurable periods;
-  quarantine retention is longer and raw/landing retention protects replayability.
+  quarantine retention is longer, raw/landing retention protects replayability, and
+  current control evidence remains retained with curated data.
 - Development schedules are disabled by default. Reserved concurrency and Lambda
   timeout/memory limits bound accidental spend. S3 request volume, Lambda duration,
   CloudWatch retention, and Athena bytes scanned are the main cost signals; exact future
@@ -200,5 +206,6 @@ checksum per date. The compactor never lists immutable attempts to choose an inp
 creates an immutable run-specific file and verified completion marker before the
 year/month Glue partition can move. S3 and Glue are not one transaction; a strict
 month-publication claim serializes normal operation, while stale claims require operator
-reconciliation. Phase 7 owns scheduled invocation, bounded publisher concurrency,
-metrics, alarms, and cross-month continuity auditing.
+reconciliation. Phase 7 supplies the on-demand Lambda boundary, unique per-invocation
+claim ownership, bounded publisher concurrency, metrics, alarms, and the scheduled
+cross-month integrity audit. Compaction itself is not scheduled for this static source.

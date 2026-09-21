@@ -70,8 +70,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "data_lake" {
     id     = "control-operational"
     status = "Enabled"
     filter { prefix = "control/" }
-    expiration { days = var.control_retention_days }
-    noncurrent_version_expiration { noncurrent_days = 30 }
+    noncurrent_version_expiration { noncurrent_days = var.control_noncurrent_retention_days }
   }
 
   rule {

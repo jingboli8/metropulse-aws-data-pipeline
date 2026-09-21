@@ -14,8 +14,8 @@ RUN python /tmp/clean_lambda_task.py "${LAMBDA_TASK_ROOT}"
 
 FROM public.ecr.aws/lambda/python@sha256:3abb572d57e4988765dbd78b72027d2979024a9b46db52cdf67d53b10987577f AS runtime
 
-LABEL org.opencontainers.image.title="MetroPulse validation Lambda" \
-      org.opencontainers.image.description="Deterministic MetroPT-3 daily validation adapter" \
+LABEL org.opencontainers.image.title="MetroPulse data pipeline Lambda" \
+      org.opencontainers.image.description="Deterministic MetroPT-3 validation, compaction, and audit handlers" \
       org.opencontainers.image.base.name="public.ecr.aws/lambda/python@sha256:3abb572d57e4988765dbd78b72027d2979024a9b46db52cdf67d53b10987577f"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \

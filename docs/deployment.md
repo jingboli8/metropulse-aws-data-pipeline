@@ -19,10 +19,15 @@ with output shaped like this; image identifiers and sizes vary:
 
 ```text
 PYARROW_OK version=21.0.0
-HANDLER_IMPORT_OK
+VALIDATION_HANDLER_IMPORT_OK
+COMPACTION_HANDLER_IMPORT_OK
+AUDIT_HANDLER_IMPORT_OK
 SMOKE_OK rows=1 quarantine=0 codec=SNAPPY identity=<sha256>
+OPERATIONS_SMOKE_OK rows=2 gaps=1 inventory=<sha256> run_id=<sha256>
 TASK_CONTENT_OK
-HANDLER_CONFIG_OK metropulse.aws.lambda_handler.lambda_handler
+VALIDATION_HANDLER_CONFIG_OK metropulse.aws.lambda_handler.lambda_handler
+COMPACTION_HANDLER_CONFIG_OK metropulse.aws.compaction_lambda_handler.lambda_handler
+AUDIT_HANDLER_CONFIG_OK metropulse.aws.audit_lambda_handler.lambda_handler
 LAMBDA_DEFAULT_USER_CONFIG_OK
 HISTORY_SECRET_SCAN_OK
 IMAGE_ID=sha256:<digest>
@@ -30,8 +35,9 @@ IMAGE_SIZE_BYTES=<bytes>
 CONTAINER_VERIFICATION_OK
 ```
 
-The verifier checks the configured handler, runs the real processor and thin handler
-against deterministic in-memory storage, inspects `/var/task`, scans text content for
+The verifier checks all three handler imports and commands, runs validation plus
+deterministic compaction/idempotent-retry/stale-claim/audit smoke tests against in-memory
+storage, inspects `/var/task`, scans text content for
 Windows absolute paths in repository-owned runtime code, and checks image history for
 common secret-bearing arguments. The whole task tree still receives dependency-inventory,
 cache, compiled-file, test, generated-data, and project-file checks. Third-party PyArrow
@@ -50,9 +56,21 @@ local image ID was also reported, but it is not a durable reproducibility identi
 BuildKit provenance or attestation output can change it between builds. The pinned base
 image digest and hash-pinned dependency are the durable build inputs.
 
+The user subsequently ran the updated Phase 7 verifier externally. PyArrow 21.0.0 and
+the imports and configured commands for the validation, compaction, and audit handlers
+passed. The validation smoke produced one valid row, zero quarantine rows, and Snappy
+Parquet. The operations smoke reconciled two rows and one timestamp gap. Its reported
+inventory and run IDs are deterministic synthetic fixture identities, not production
+data. The task audit inspected 762 entries; the Lambda default-user configuration and
+Docker-history secret scan passed. The loaded image was 233,386,762 bytes
+(approximately 222.6 MiB). The reported local image ID is not recorded as a durable
+deployment digest because BuildKit provenance or attestation can change it; the pinned
+base-image digest, hash-pinned dependency, and eventual ECR digest provide the relevant
+build and deployment identities.
+
 ## Validate Terraform without AWS
 
-The two directories are independent root stacks and use local state if later applied.
+The four directories are independent root stacks and use local state if later applied.
 Initialization downloads only the signed HashiCorp AWS provider; native tests use a mock
 provider.
 
@@ -66,6 +84,9 @@ terraform -chdir=infra/platform test
 terraform -chdir=infra/query init -backend=false
 terraform -chdir=infra/query validate
 terraform -chdir=infra/query test
+terraform -chdir=infra/operations init -backend=false
+terraform -chdir=infra/operations validate
+terraform -chdir=infra/operations test
 terraform fmt -check -recursive infra
 ```
 
@@ -73,10 +94,12 @@ Do not run `plan` or `apply` merely to validate this repository. No remote-state
 is configured. `.terraform/`, plans, overrides, variable files, crash logs, and state are
 ignored; each root's signed dependency lock file is tracked.
 
-The query root consumes explicit bucket-name inputs rather than remote state. Its future
+The query and operations roots consume explicit inputs rather than remote state. The query root's future
 apply follows `infra/platform` and also requires the reviewed 12-digit expected owner of
 the results bucket. Phase 5 creates an empty table contract only: do not run Athena SQL
-until Phase 6 has published and explicitly registered approved curated partitions.
+until Phase 6 has published and explicitly registered approved curated partitions. The
+operations root follows platform and query. Keep its audit schedule disabled until every
+curated partition and the exact immutable inventory reference have been reviewed.
 
 ## Future bootstrap and release sequence
 
@@ -95,6 +118,9 @@ When an AWS development account is explicitly authorized:
 7. Apply the platform only after review. The raw notification accepts only
    `raw/source=metropt3/` keys ending in `data.csv`; staging, quarantine, and control
    writes cannot match it.
+8. Apply the query layer before operations so the catalog identity exists. Invoke
+   compaction only with an exact approved selection. Publish and pin an audit inventory,
+   then enable the weekly audit schedule in a separately reviewed operations plan.
 
 ECR and Lambda must use the same AWS Region. Rebuilding never changes an existing
 digest. Push a newly tagged image, capture the new digest, and update the platform input

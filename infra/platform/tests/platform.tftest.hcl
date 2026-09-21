@@ -73,6 +73,21 @@ run "secure_platform_contract" {
 
   assert {
     condition = (
+      length([
+        for rule in aws_s3_bucket_lifecycle_configuration.data_lake.rule : rule
+        if rule.id == "control-operational" && length(rule.expiration) == 0
+      ]) == 1 &&
+      one([
+        for rule in aws_s3_bucket_lifecycle_configuration.data_lake.rule :
+        one(rule.noncurrent_version_expiration).noncurrent_days
+        if rule.id == "control-operational"
+      ]) == 90
+    )
+    error_message = "Current control evidence must not expire; superseded versions need bounded retention."
+  }
+
+  assert {
+    condition = (
       one(one(aws_s3_bucket_server_side_encryption_configuration.data_lake.rule).apply_server_side_encryption_by_default).sse_algorithm == "AES256" &&
       one(one(aws_s3_bucket_server_side_encryption_configuration.athena_results.rule).apply_server_side_encryption_by_default).sse_algorithm == "AES256"
     )
