@@ -16,6 +16,12 @@ INFRA = ROOT / "infra"
 ANSI_ESCAPE = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|[@-_])")
 
 
+def _normalize_powershell_output(output: str) -> str:
+    without_ansi = ANSI_ESCAPE.sub("", output)
+    without_continuation_prefixes = re.sub(r"(?m)^[ \t]*\|[ \t]*", "", without_ansi)
+    return " ".join(without_continuation_prefixes.split())
+
+
 def _read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
@@ -299,6 +305,20 @@ def test_ansi_escape_normalization_consumes_complete_csi_sequences() -> None:
     formatted = "\x1b[31;1mException:\x1b[0m message \x1b[36;1mvalue\x1b[0m"
 
     assert ANSI_ESCAPE.sub("", formatted) == "Exception: message value"
+    assert _normalize_powershell_output(formatted) == "Exception: message value"
+
+
+def test_powershell_output_normalization_joins_wrapped_error() -> None:
+    formatted = (
+        "\x1b[31;1mException:\x1b[0m tagged image "
+        "'metropulse-lambda:phase4-local' is\n"
+        "     | unavailable in the local Docker image store."
+    )
+
+    assert (
+        "tagged image 'metropulse-lambda:phase4-local' is unavailable"
+        in _normalize_powershell_output(formatted)
+    )
 
 
 def test_container_verifier_stops_when_loaded_image_is_unavailable(tmp_path: Path) -> None:
@@ -357,7 +377,7 @@ def test_container_verifier_stops_when_loaded_image_is_unavailable(tmp_path: Pat
 
     assert completed.returncode != 0
     combined_output = completed.stdout + completed.stderr
-    normalized_output = ANSI_ESCAPE.sub("", combined_output)
+    normalized_output = _normalize_powershell_output(combined_output)
     assert "tagged image 'metropulse-lambda:phase4-local' is unavailable" in normalized_output
     calls = call_log.read_text(encoding="utf-8").splitlines()
     assert any(call.startswith("buildx build ") and "--load" in call for call in calls)
