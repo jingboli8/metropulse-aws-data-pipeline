@@ -13,6 +13,13 @@ from scripts.clean_lambda_task import clean_task_root
 
 ROOT = Path(__file__).resolve().parents[1]
 INFRA = ROOT / "infra"
+ANSI_ESCAPE = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|[@-_])")
+
+
+def _normalize_powershell_output(output: str) -> str:
+    without_ansi = ANSI_ESCAPE.sub("", output)
+    without_continuation_prefixes = re.sub(r"(?m)^[ \t]*\|[ \t]*", "", without_ansi)
+    return " ".join(without_continuation_prefixes.split())
 
 
 def _read(path: str) -> str:
@@ -294,6 +301,26 @@ def test_container_verifier_gates_inspection_on_loaded_image() -> None:
     assert missing_guard < first_inspect < first_run
 
 
+def test_ansi_escape_normalization_consumes_complete_csi_sequences() -> None:
+    formatted = "\x1b[31;1mException:\x1b[0m message \x1b[36;1mvalue\x1b[0m"
+
+    assert ANSI_ESCAPE.sub("", formatted) == "Exception: message value"
+    assert _normalize_powershell_output(formatted) == "Exception: message value"
+
+
+def test_powershell_output_normalization_joins_wrapped_error() -> None:
+    formatted = (
+        "\x1b[31;1mException:\x1b[0m tagged image "
+        "'metropulse-lambda:phase4-local' is\n"
+        "     | unavailable in the local Docker image store."
+    )
+
+    assert (
+        "tagged image 'metropulse-lambda:phase4-local' is unavailable"
+        in _normalize_powershell_output(formatted)
+    )
+
+
 def test_container_verifier_stops_when_loaded_image_is_unavailable(tmp_path: Path) -> None:
     powershell = shutil.which("pwsh") or shutil.which("powershell")
     if powershell is None:
@@ -302,21 +329,42 @@ def test_container_verifier_stops_when_loaded_image_is_unavailable(tmp_path: Pat
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
     call_log = tmp_path / "docker-calls.txt"
-    (fake_bin / "docker.cmd").write_text(
-        "@echo off\r\n"
-        'echo %*>>"%FAKE_DOCKER_LOG%"\r\n'
-        'if "%1"=="info" goto info\r\n'
-        'if "%1"=="buildx" exit /b 0\r\n'
-        'if "%1"=="image" if "%2"=="ls" exit /b 0\r\n'
-        "exit /b 88\r\n"
-        ":info\r\n"
-        "echo linux/amd64\r\n"
-        "exit /b 0\r\n",
-        encoding="utf-8",
-    )
+    if os.name == "nt":
+        fake_docker = fake_bin / "docker.cmd"
+        fake_docker.write_text(
+            "@echo off\r\n"
+            'echo %*>>"%FAKE_DOCKER_LOG%"\r\n'
+            'if "%1"=="info" goto info\r\n'
+            'if "%1"=="buildx" exit /b 0\r\n'
+            'if "%1"=="image" if "%2"=="ls" exit /b 0\r\n'
+            "exit /b 88\r\n"
+            ":info\r\n"
+            "echo linux/amd64\r\n"
+            "exit /b 0\r\n",
+            encoding="utf-8",
+        )
+    else:
+        fake_docker = fake_bin / "docker"
+        fake_docker.write_text(
+            "#!/bin/sh\n"
+            'printf \'%s\\n\' "$*" >> "$FAKE_DOCKER_LOG"\n'
+            'if [ "$1" = "info" ]; then\n'
+            "  printf '%s\\n' 'linux/amd64'\n"
+            "  exit 0\n"
+            "fi\n"
+            'if [ "$1" = "buildx" ]; then exit 0; fi\n'
+            'if [ "$1" = "image" ] && [ "$2" = "ls" ]; then exit 0; fi\n'
+            "exit 88\n",
+            encoding="utf-8",
+        )
+        fake_docker.chmod(0o755)
+
     environment = os.environ.copy()
     environment["PATH"] = f"{fake_bin}{os.pathsep}{environment['PATH']}"
     environment["FAKE_DOCKER_LOG"] = str(call_log)
+    resolved_docker = shutil.which("docker", path=environment["PATH"])
+    assert resolved_docker is not None
+    assert Path(resolved_docker).resolve() == fake_docker.resolve()
 
     completed = subprocess.run(
         [powershell, "-NoProfile", "-File", str(ROOT / "scripts/verify_lambda_container.ps1")],
@@ -328,9 +376,9 @@ def test_container_verifier_stops_when_loaded_image_is_unavailable(tmp_path: Pat
     )
 
     assert completed.returncode != 0
-    assert "tagged image 'metropulse-lambda:phase4-local' is unavailable" in (
-        completed.stdout + completed.stderr
-    )
+    combined_output = completed.stdout + completed.stderr
+    normalized_output = _normalize_powershell_output(combined_output)
+    assert "tagged image 'metropulse-lambda:phase4-local' is unavailable" in normalized_output
     calls = call_log.read_text(encoding="utf-8").splitlines()
     assert any(call.startswith("buildx build ") and "--load" in call for call in calls)
     assert any(call.startswith("image ls ") for call in calls)
